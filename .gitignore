@@ -1,0 +1,13 @@
+node_modules/
+outputs/
+temp/
+ffmpeg/
+whisper_models/
+dist/
+__pycache__/
+costs.json
+.env
+*.mp4
+*.mp3
+*.wav
+package-lock.json

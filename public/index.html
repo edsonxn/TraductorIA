@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Traductor de Video IA - Studio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+      /* ===== NEW DARK THEME — Clean & Framed ===== */
+      *,
+      *::before,
+      *::after {
+          box-sizing: border-box;
+      }
+
+      body {
+          margin: 0;
+          padding: 0;
+          height: 100vh;
+          overflow: hidden;
+          background: #09090b;
+          font-family: 'Inter', sans-serif;
+          color: #e4e4e7;
+      }
+
+      .tv-container {
+          max-width: 1600px;
+          margin: 0 auto;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          padding: 12px 16px;
+          gap: 12px;
+      }
+
+      /* ── Header ── */
+      .tv-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 20px;
+          background: #18181b;
+          border: 1px solid #27272a;
+          border-radius: 10px;
+          flex-shrink: 0;
+      }
+
+      .tv-header h1 {
+          font-size: 1.25rem;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          color: #fafafa;
+          font-weight: 600;
+          letter-spacing: -0.3px;
+      }
+
+      .tv-header h1 i {
+          color: #a78bfa;
+          font-size: 1.1rem;
+      }
+
+      /* ── Login Overlay ── */
+      .login-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          background: #09090b;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-direction: column;
+          gap: 32px;
+          transition: opacity 0.4s ease;
+      }
+      .login-overlay.hidden {
+          opacity: 0;
+          pointer-events: none;
+      }
+      .login-card {
+          background: #18181b;
+          border: 1px solid #27272a;
+          border-radius: 16px;
+          padding: 48px 40px;
+          text-align: center;
+          max-width: 420px;
+          width: 90%;
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+      }
+      .login-card h2 {
+          margin: 0 0 8px;
+          font-size: 1.6rem;
+          color: #fafafa;
+          font-weight: 700;
+      }
+      .login-card p {
+          margin: 0 0 32px;
+          color: #71717a;
+          font-size: 0.95rem;
+      }
+      .login-card .login-icon {
+          font-size: 2.5rem;
+          color: #a78bfa;
+          margin-bottom: 20px;
+      }
+      .google-btn-wrapper {
+          display: flex;
+          justify-content: center;
+      }
+      /* ── User Profile in Header ── */
+      .user-profile {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+      }
+      .user-profile img {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          border: 2px solid #3f3f46;
+      }
+      .user-profile span {
+          color: #a1a1aa;
+          font-size: 0.85rem;
+          max-width: 150px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+      }
+      .logout-btn {
+          background: #27272a;
+          border: 1px solid #3f3f46;
+          color: #a1a1aa;
+          padding: 6px 12px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 0.8rem;
+          transition: all 0.15s;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+      }
+      .logout-btn:hover {
+          background: #3f3f46;
+          color: #fafafa;
+      }
+      /* ── Pending Overlay ── */
+      .pending-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9998;
+          background: #09090b;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+      }
+      .pending-overlay.hidden { display: none; }
+      .pending-card {
+          background: #18181b;
+          border: 1px solid #27272a;
+          border-radius: 16px;
+          padding: 48px 40px;
+          text-align: center;
+          max-width: 460px;
+          width: 90%;
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+      }
+      .pending-card .pending-icon {
+          font-size: 3rem;
+          color: #f59e0b;
+          margin-bottom: 20px;
+      }
+      .pending-card h2 { margin: 0 0 12px; color: #fafafa; font-weight: 700; }
+      .pending-card p { margin: 0 0 24px; color: #71717a; font-size: 0.95rem; line-height: 1.5; }
+      .pending-card .denied-text { color: #f87171; }
+      .pending-card .back-login-btn {
+          background: #27272a; border: 1px solid #3f3f46; color: #a1a1aa;
+          padding: 10px 24px; border-radius: 8px; cursor: pointer;
+          font-size: 0.9rem; transition: all 0.15s;
+      }
+      .pending-card .back-login-btn:hover { background: #3f3f46; color: #fafafa; }
+      /* ── Admin Panel ── */
+      .admin-panel-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9000;
+          background: rgba(0,0,0,0.7);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          backdrop-filter: blur(4px);
+      }
+      .admin-panel-overlay.hidden { display: none; }
+      .admin-panel {
+          background: #18181b;
+          border: 1px solid #27272a;
+          border-radius: 16px;
+          width: 90%;
+          max-width: 800px;
+          max-height: 80vh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+      }
+      .admin-panel-header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 20px 24px; border-bottom: 1px solid #27272a;
+      }
+      .admin-panel-header h2 { margin: 0; font-size: 1.15rem; color: #fafafa; display: flex; align-items: center; gap: 10px; }
+      .admin-panel-header h2 i { color: #a78bfa; }
+      .admin-close-btn {
+          background: #27272a; border: 1px solid #3f3f46; color: #a1a1aa;
+          width: 32px; height: 32px; border-radius: 6px; cursor: pointer;
+          display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+      }
+      .admin-close-btn:hover { background: #3f3f46; color: #fafafa; }
+      .admin-panel-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+      .admin-user-row {
+          display: flex; align-items: center; gap: 14px;
+          padding: 14px 16px; background: #111113; border: 1px solid #27272a;
+          border-radius: 10px; margin-bottom: 10px; transition: border-color 0.15s;
+      }
+      .admin-user-row:hover { border-color: #3f3f46; }
+      .admin-user-row img { width: 36px; height: 36px; border-radius: 50%; }
+      .admin-user-info { flex: 1; min-width: 0; }
+      .admin-user-info .admin-user-name { color: #fafafa; font-weight: 600; font-size: 0.9rem; }
+      .admin-user-info .admin-user-email { color: #71717a; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .admin-user-info .admin-user-date { color: #52525b; font-size: 0.72rem; }
+      .admin-status-badge {
+          padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+          text-transform: uppercase; letter-spacing: 0.5px;
+      }
+      .admin-status-badge.approved { background: rgba(74,222,128,0.15); color: #4ade80; }
+      .admin-status-badge.pending { background: rgba(245,158,11,0.15); color: #f59e0b; }
+      .admin-status-badge.denied { background: rgba(248,113,113,0.15); color: #f87171; }
+      .admin-action-btn {
+          padding: 6px 14px; border-radius: 6px; font-size: 0.78rem; cursor: pointer;
+          border: 1px solid; font-weight: 600; transition: all 0.15s;
+      }
+      .admin-action-btn.approve { background: rgba(74,222,128,0.1); border-color: #2d4a3e; color: #4ade80; }
+      .admin-action-btn.approve:hover { background: rgba(74,222,128,0.25); }
+      .admin-action-btn.deny { background: rgba(248,113,113,0.1); border-color: #4a2020; color: #f87171; }
+      .admin-action-btn.deny:hover { background: rgba(248,113,113,0.25); }
+      .admin-action-btn.delete { background: rgba(113,113,122,0.1); border-color: #3f3f46; color: #a1a1aa; }
+      .admin-action-btn.delete:hover { background: rgba(113,113,122,0.25); }
+      .admin-btn-header {
+          background: #7c3aed; border: 1px solid #6d28d9; color: white;
+          padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.82rem;
+          font-weight: 600; transition: all 0.15s; display: flex; align-items: center; gap: 6px;
+      }
+      .admin-btn-header:hover { background: #6d28d9; }
+      .admin-user-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+      .tv-btn-back {
+          background: #27272a;
+          padding: 7px 14px;
+          border-radius: 6px;
+          color: #a1a1aa;
+          transition: all 0.15s;
+          border: 1px solid #3f3f46;
+          font-size: 0.85rem;
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+      }
+
+      .tv-btn-back:hover {
+          background: #3f3f46;
+          color: #fafafa;
+      }
+
+      /* ── Main Layout ── */
+      .tv-main {
+          flex: 1;
+          display: grid;
+          grid-template-columns: 340px 1fr;
+          gap: 12px;
+          overflow: hidden;
+          min-height: 0;
+      }
+
+      /* ── Sidebar ── */
+      .tv-sidebar {
+          background: #18181b;
+          border: 1px solid #27272a;
+          border-radius: 10px;
+          padding: 18px;
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          min-width: 340px;
+      }
+
+      /* Scrollbar */
+      .tv-sidebar::-webkit-scrollbar,
+      .tv-workspace-content::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+      }
+      .tv-sidebar::-webkit-scrollbar-track,
+      .tv-workspace-content::-webkit-scrollbar-track {
+          background: transparent;
+      }
+      .tv-sidebar::-webkit-scrollbar-thumb,
+      .tv-workspace-content::-webkit-scrollbar-thumb {
+          background: #3f3f46;
+          border-radius: 3px;
+      }
+      .tv-sidebar::-webkit-scrollbar-thumb:hover,
+      .tv-workspace-content::-webkit-scrollbar-thumb:hover {
+          background: #52525b;
+      }
+
+      /* ── Workspace ── */
+      .tv-workspace {
+          background: #18181b;
+          border: 1px solid #27272a;
+          border-radius: 10px;
+          padding: 0;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+      }
+
+      .tv-workspace-content {
+          padding: 28px;
+          overflow-y: auto;
+          flex: 1;
+      }
+
+      .tv-auto-container {
+          max-width: 920px;
+          margin: 0 auto;
+      }
+
+      /* ── Tabs ── */
+      .tv-tabs {
+          display: flex;
+          gap: 2px;
+          background: #111113;
+          padding: 8px 16px;
+          border-bottom: 1px solid #27272a;
+      }
+
+      .tv-tab-btn {
+          padding: 8px 18px;
+          border: none;
+          background: transparent;
+          color: #71717a;
+          cursor: pointer;
+          border-radius: 6px;
+          font-weight: 500;
+          transition: all 0.15s;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.9rem;
+      }
+
+      .tv-tab-btn:hover {
+          color: #d4d4d8;
+          background: rgba(255, 255, 255, 0.04);
+      }
+
+      .tv-tab-btn.active {
+          background: #27272a;
+          color: #fafafa;
+          border: 1px solid #3f3f46;
+      }
+
+      .tv-tab-btn.active i {
+          color: #a78bfa;
+      }
+
+      .tv-tab-content {
+          display: none;
+          height: 100%;
+          flex-direction: column;
+      }
+
+      .tv-tab-content.active {
+          display: flex;
+      }
+
+      /* ── Drop Zones ── */
+      .tv-drop-zone {
+          border: 1.5px dashed #3f3f46;
+          border-radius: 10px;
+          padding: 36px 20px;
+          text-align: center;
+          background: #111113;
+          transition: all 0.2s ease;
+          cursor: pointer;
+          min-height: 170px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          position: relative;
+          overflow: hidden;
+      }
+
+      .tv-drop-zone:hover {
+          border-color: #a78bfa;
+          background: rgba(167, 139, 250, 0.04);
+      }
+
+      .tv-drop-zone.dragover {
+          border-color: #7c3aed;
+          background: rgba(124, 58, 237, 0.08);
+      }
+
+      .tv-drop-zone i {
+          font-size: 2.2rem;
+          color: #52525b;
+          margin-bottom: 12px;
+          transition: color 0.2s;
+      }
+
+      .tv-drop-zone:hover i {
+          color: #a78bfa;
+      }
+
+      .tv-drop-zone p {
+          color: #71717a;
+          font-size: 0.9rem;
+          margin: 0;
+      }
+
+      .tv-file-name {
+          color: #7c3aed;
+          font-weight: 600;
+          margin-top: 12px !important;
+          word-break: break-all;
+          background: rgba(124, 58, 237, 0.1);
+          padding: 5px 12px;
+          border-radius: 4px;
+          font-size: 0.82rem;
+          border: 1px solid rgba(124, 58, 237, 0.2);
+      }
+
+      /* ── Audio Grid (Manual) ── */
+      .tv-audio-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+          gap: 12px;
+          padding-top: 12px;
+      }
+
+      .tv-audio-card {
+          background: #111113;
+          border: 1px solid #27272a;
+          border-radius: 8px;
+          padding: 12px;
+          transition: border-color 0.15s;
+      }
+
+      .tv-audio-card:hover {
+          border-color: #3f3f46;
+      }
+
+      .tv-audio-card label {
+          display: block;
+          margin-bottom: 8px;
+          color: #d4d4d8;
+          font-weight: 500;
+          font-size: 0.88rem;
+      }
+
+      /* ── Action Bar ── */
+      .tv-action-bar {
+          margin-top: auto;
+          padding: 16px 28px;
+          border-top: 1px solid #27272a;
+          display: flex;
+          justify-content: flex-end;
+          background: #111113;
+      }
+
+      /* ── Progress ── */
+      .tv-progress {
+          margin-top: auto;
+          background: #111113;
+          padding: 14px;
+          border-radius: 8px;
+          border: 1px solid #27272a;
+      }
+
+      /* ── Section Titles ── */
+      .tv-section-title {
+          font-size: 0.78rem;
+          text-transform: uppercase;
+          letter-spacing: 1.2px;
+          color: #71717a;
+          font-weight: 700;
+          margin-bottom: 14px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid #27272a;
+      }
+
+      /* ── Form Groups ── */
+      .tv-form-group {
+          margin-bottom: 18px;
+      }
+
+      .tv-options-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+      }
+
+      .tv-option-label {
+          display: flex;
+          align-items: center;
+          cursor: pointer;
+          user-select: none;
+          color: #a1a1aa;
+          font-size: 0.9rem;
+          padding: 5px 8px;
+          border-radius: 6px;
+          transition: all 0.12s;
+      }
+
+      .tv-option-label:hover {
+          color: #fafafa;
+          background: rgba(255, 255, 255, 0.03);
+      }
+
+      .tv-checkbox-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 6px;
+      }
+
+      /* ── Info Box ── */
+      .tv-info-box {
+          background: rgba(124, 58, 237, 0.06);
+          border: 1px solid rgba(124, 58, 237, 0.15);
+          padding: 14px 16px;
+          border-radius: 8px;
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+      }
+
+      .tv-info-box i {
+          color: #a78bfa;
+          margin-top: 2px;
+      }
+
+      .tv-info-text p {
+          margin: 0;
+          font-size: 0.9rem;
+          color: #d4d4d8;
+          line-height: 1.5;
+      }
+
+      /* ── Select / Inputs ── */
+      .tv-sidebar select {
+          background: #09090b;
+          border: 1px solid #3f3f46;
+          color: #e4e4e7;
+          padding: 8px 10px;
+          border-radius: 6px;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          font-size: 0.88rem;
+          transition: border-color 0.15s;
+      }
+
+      .tv-sidebar select:focus {
+          outline: none;
+          border-color: #7c3aed;
+      }
+
+      input[type="checkbox"],
+      input[type="radio"] {
+          accent-color: #7c3aed;
+          width: 15px;
+          height: 15px;
+          margin-right: 8px;
+          cursor: pointer;
+      }
+
+      /* ── API Keys Panel ── */
+      .tv-keys-toggle {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 10px 12px;
+          background: #111113;
+          border: 1px solid #27272a;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.15s;
+          user-select: none;
+      }
+      .tv-keys-toggle:hover {
+          border-color: #3f3f46;
+          background: #1a1a1e;
+      }
+      .tv-keys-toggle .tv-keys-toggle-left {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.82rem;
+          font-weight: 600;
+          color: #a1a1aa;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+      }
+      .tv-keys-toggle .tv-keys-toggle-left i {
+          color: #f59e0b;
+          font-size: 0.85rem;
+      }
+      .tv-keys-toggle .tv-keys-chevron {
+          color: #52525b;
+          transition: transform 0.2s;
+          font-size: 0.75rem;
+      }
+      .tv-keys-toggle.open .tv-keys-chevron {
+          transform: rotate(180deg);
+      }
+      .tv-keys-panel {
+          display: none;
+          flex-direction: column;
+          gap: 8px;
+          padding: 12px;
+          background: #111113;
+          border: 1px solid #27272a;
+          border-top: none;
+          border-radius: 0 0 8px 8px;
+          margin-top: -8px;
+      }
+      .tv-keys-panel.open {
+          display: flex;
+      }
+      .tv-key-row {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+      }
+      .tv-key-row label {
+          font-size: 0.75rem;
+          color: #71717a;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+      }
+      .tv-key-row label .tv-key-badge {
+          font-size: 0.65rem;
+          padding: 1px 5px;
+          border-radius: 3px;
+          font-weight: 700;
+          text-transform: uppercase;
+      }
+      .tv-key-badge.primary {
+          background: rgba(245, 158, 11, 0.15);
+          color: #f59e0b;
+          border: 1px solid rgba(245, 158, 11, 0.25);
+      }
+      .tv-key-badge.free {
+          background: rgba(74, 222, 128, 0.1);
+          color: #4ade80;
+          border: 1px solid rgba(74, 222, 128, 0.2);
+      }
+      .tv-key-input {
+          background: #09090b;
+          border: 1px solid #27272a;
+          color: #e4e4e7;
+          padding: 7px 10px;
+          border-radius: 6px;
+          font-size: 0.82rem;
+          font-family: 'Inter', monospace;
+          transition: border-color 0.15s;
+          width: 100%;
+      }
+      .tv-key-input:focus {
+          outline: none;
+          border-color: #7c3aed;
+      }
+      .tv-key-input::placeholder {
+          color: #3f3f46;
+      }
+      .tv-keys-save {
+          margin-top: 4px;
+          padding: 8px 0;
+          background: #7c3aed;
+          border: 1px solid #6d28d9;
+          color: #fff;
+          border-radius: 6px;
+          font-size: 0.82rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+      }
+      .tv-keys-save:hover {
+          background: #6d28d9;
+      }
+      .tv-keys-save:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+      }
+      .tv-keys-status {
+          font-size: 0.78rem;
+          text-align: center;
+          padding: 4px;
+          border-radius: 4px;
+          display: none;
+      }
+      .tv-keys-status.success {
+          display: block;
+          color: #4ade80;
+          background: rgba(74, 222, 128, 0.08);
+      }
+      .tv-keys-status.error {
+          display: block;
+          color: #f87171;
+          background: rgba(248, 113, 113, 0.08);
+      }
+
+      /* ── Responsive ── */
+      @media (max-width: 900px) {
+          .tv-main { grid-template-columns: 1fr !important; overflow: auto !important; }
+          .tv-sidebar { height: auto !important; overflow-y: visible !important; min-width: 0 !important; }
+          .tv-workspace-content { overflow-y: visible !important; }
+          .tv-container { height: auto !important; }
+          body { overflow: auto !important; height: auto !important; padding: 10px !important; }
+      }
+      @media (max-width: 768px) {
+          div[style*='grid-template-columns: 1fr 1fr'] { grid-template-columns: 1fr !important; gap: 15px !important; display: flex !important; flex-direction: column !important; }
+          div[style*='grid-template-columns: repeat(3, 1fr)'] { grid-template-columns: 1fr !important; display: flex !important; flex-direction: column !important; }
+          .tv-progress-steps { flex-wrap: wrap !important; }
+          .tv-step { min-width: 100px; }
+          .tv-header h1 { font-size: 1.25rem !important; }
+      }
+
+</style>
+</head>
+<body>
+
+  <!-- Login Overlay -->
+  <div class="login-overlay" id="loginOverlay">
+      <div class="login-card">
+          <div class="login-icon"><i class="fas fa-language"></i></div>
+          <h2>Traductor de Video IA</h2>
+          <p>Inicia sesión con tu cuenta de Google para continuar</p>
+          <div class="google-btn-wrapper">
+              <button id="googleSignInBtn" style="background: #fff; color: #3c4043; border: 1px solid #dadce0; border-radius: 24px; padding: 12px 28px; font-size: 0.95rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 12px; font-family: 'Inter', sans-serif; transition: box-shadow 0.2s;">
+                  <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                  Iniciar sesión con Google
+              </button>
+          </div>
+      </div>
+  </div>
+
+  <!-- Pending/Denied Overlay -->
+  <div class="pending-overlay hidden" id="pendingOverlay">
+      <div class="pending-card">
+          <div class="pending-icon"><i class="fas fa-hourglass-half" id="pendingIcon"></i></div>
+          <h2 id="pendingTitle">Esperando aprobación</h2>
+          <p id="pendingMessage">Tu cuenta ha sido registrada. El administrador debe aprobar tu acceso para poder usar la aplicación.</p>
+          <button class="back-login-btn" id="pendingLogoutBtn"><i class="fas fa-arrow-left"></i> Cerrar sesión</button>
+      </div>
+  </div>
+
+  <!-- Admin Panel Overlay -->
+  <div class="admin-panel-overlay hidden" id="adminPanelOverlay">
+      <div class="admin-panel">
+          <div class="admin-panel-header">
+              <h2><i class="fas fa-users-cog"></i> Panel de Administración</h2>
+              <button class="admin-close-btn" id="adminCloseBtn"><i class="fas fa-times"></i></button>
+          </div>
+          <div class="admin-panel-body" id="adminUserList">
+              <p style="color: #71717a; text-align: center;">Cargando usuarios...</p>
+          </div>
+      </div>
+  </div>
+
+  <div class="tv-container" id="appContainer" style="display: none;">
+      <header class="tv-header">
+          <h1><i class="fas fa-language"></i> Traductor de Video IA</h1>
+          <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="color: #64748b; font-size: 0.85rem;">Puerto: <span id="portDisplay">3001</span></span>
+              <div class="user-profile" id="userProfile" style="display: none;">
+                  <button class="admin-btn-header" id="adminPanelBtn" style="display: none;"><i class="fas fa-users-cog"></i> Admin</button>
+                  <img id="userAvatar" src="" alt="avatar">
+                  <span id="userName"></span>
+                  <button class="logout-btn" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Salir</button>
+              </div>
+          </div>
+      </header>
+
+      <div class="tv-main">
+          <!-- Sidebar -->
+          <aside class="tv-sidebar">
+              <!-- API Keys Section -->
+              <div>
+                  <div class="tv-keys-toggle" id="keysToggleBtn">
+                      <div class="tv-keys-toggle-left">
+                          <i class="fas fa-key"></i> API Keys
+                      </div>
+                      <i class="fas fa-chevron-down tv-keys-chevron"></i>
+                  </div>
+                  <div class="tv-keys-panel" id="keysPanel">
+                      <div class="tv-key-row">
+                          <label><span class="tv-key-badge primary">Principal</span> GOOGLE_API_KEY</label>
+                          <input class="tv-key-input" type="password" id="key_GOOGLE_API_KEY" placeholder="AIza..." data-env="GOOGLE_API_KEY" autocomplete="off">
+                      </div>
+                      <div class="tv-key-row">
+                          <label><span class="tv-key-badge free">Gratis 1</span> GOOGLE_API_KEY_GRATIS</label>
+                          <input class="tv-key-input" type="password" id="key_GOOGLE_API_KEY_GRATIS" placeholder="AIza..." data-env="GOOGLE_API_KEY_GRATIS" autocomplete="off">
+                      </div>
+                      <div class="tv-key-row">
+                          <label><span class="tv-key-badge free">Gratis 2</span> GOOGLE_API_KEY_GRATIS2</label>
+                          <input class="tv-key-input" type="password" id="key_GOOGLE_API_KEY_GRATIS2" placeholder="AIza..." data-env="GOOGLE_API_KEY_GRATIS2" autocomplete="off">
+                      </div>
+                      <div class="tv-key-row">
+                          <label><span class="tv-key-badge free">Gratis 3</span> GOOGLE_API_KEY_GRATIS3</label>
+                          <input class="tv-key-input" type="password" id="key_GOOGLE_API_KEY_GRATIS3" placeholder="AIza..." data-env="GOOGLE_API_KEY_GRATIS3" autocomplete="off">
+                      </div>
+                      <div class="tv-key-row">
+                          <label><span class="tv-key-badge free">Gratis 4</span> GOOGLE_API_KEY_GRATIS4</label>
+                          <input class="tv-key-input" type="password" id="key_GOOGLE_API_KEY_GRATIS4" placeholder="AIza..." data-env="GOOGLE_API_KEY_GRATIS4" autocomplete="off">
+                      </div>
+                      <div class="tv-key-row">
+                          <label><span class="tv-key-badge free">Gratis 5</span> GOOGLE_API_KEY_GRATIS5</label>
+                          <input class="tv-key-input" type="password" id="key_GOOGLE_API_KEY_GRATIS5" placeholder="AIza..." data-env="GOOGLE_API_KEY_GRATIS5" autocomplete="off">
+                      </div>
+                      <button class="tv-keys-save" id="keysSaveBtn">
+                          <i class="fas fa-save"></i> Guardar en Navegador
+                      </button>
+                      <div class="tv-keys-status" id="keysStatus"></div>
+                      <p style="font-size: 0.7rem; color: #52525b; margin: 4px 0 0; text-align: center; line-height: 1.3;">Tus keys se guardan localmente en tu navegador. Nunca se almacenan en el servidor.</p>
+                  </div>
+              </div>
+
+              <div class="tv-section-title">
+                  <i class="fas fa-sliders-h"></i> Configuración
+              </div>
+
+              <div class="tv-form-group">
+                  <label style="color: #cbd5e1; font-size: 0.9em; font-weight: 500; display: block; margin-bottom: 6px;">
+                    <i class="fas fa-hourglass-end" style="color: #60a5fa; margin-right: 4px;"></i>
+                    Pantalla Final (segundos)
+                  </label>
+                  <input type="number" id="endScreenSeconds" value="20" min="0" max="120" step="1"
+                    style="width: 80px; padding: 6px 10px; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; font-size: 0.9em;">
+                  <small style="color: #64748b; display: block; margin-top: 4px; font-size: 0.78em; line-height: 1.4;">
+                    Silencio extra al final para la pantalla de YouTube. Pon 0 para shorts/reels.
+                  </small>
+              </div>
+
+              <div id="autoSettingsPanel">
+                  <div class="tv-form-group">
+                      <div class="tv-section-title">
+                          <i class="fas fa-brain"></i> Modelo de Traducción
+                      </div>
+                      <div class="tv-options-list">
+                           <label class="tv-option-label">
+                              <input type="radio" name="translationModel" value="gemini-3-flash-preview" checked>
+                              <span>Gemini 3 Flash Preview</span>
+                          </label>
+                          <label class="tv-option-label">
+                              <input type="radio" name="translationModel" value="gemini-3.1-pro-preview">
+                              <span>Gemini 3.1 Pro Preview (Recomendado)</span>
+                          </label>
+                          <label class="tv-option-label">
+                              <input type="radio" name="translationModel" value="gemini-2.5-flash">
+                              <span>Gemini 2.5 Flash</span>
+                          </label>
+                      </div>
+                  </div>
+
+                  <div class="tv-form-group">
+                      <div class="tv-section-title">
+                          <i class="fas fa-microphone-alt"></i> Proveedor de Voz
+                      </div>
+                      <div class="tv-options-list">
+                          <label class="tv-option-label">
+                              <input type="radio" name="ttsProvider" value="google" checked onchange="window.toggleVoiceSelect()">
+                              <span>Gemini TTS (Estándar)</span>
+                          </label>
+                          <label class="tv-option-label">
+                              <input type="radio" name="ttsProvider" value="google_pro" onchange="window.toggleVoiceSelect()">
+                              <span>Gemini TTS Pro (Model 2.5)</span>
+                          </label>
+                          <label class="tv-option-label">
+                              <input type="radio" name="ttsProvider" value="google_cloud" onchange="window.toggleVoiceSelect()">
+                              <span>Cloud TTS Neural2 (Consistente)</span>
+                          </label>
+                          <label class="tv-option-label">
+                              <input type="radio" name="ttsProvider" value="google_wavenet" onchange="window.toggleVoiceSelect()">
+                              <span>Cloud TTS WaveNet (Barato)</span>
+                          </label>
+                          <label class="tv-option-label">
+                              <input type="radio" name="ttsProvider" value="text_only" onchange="window.toggleVoiceSelect()">
+                              <span>Solo Texto (Subtítulos)</span>
+                          </label>
+                      </div>
+                  </div>
+
+
+                  <div id="cloudVoiceSelectContainer" class="tv-form-group" style="display: none;">
+                      <label style="display: block; margin-bottom: 8px; font-size: 0.9em; color:#94a3b8;">Género de Voz (Cloud TTS):</label>
+                      <select id="cloudVoiceSelect" style="width: 100%; background: #1e1e2e; color: #e4e4e7; border: 1px solid #27272a; border-radius: 6px; padding: 8px 12px; font-size: 0.9em;">
+                          <option value="male">Masculina</option>
+                          <option value="female">Femenina</option>
+                      </select>
+                      <p style="margin: 8px 0 0; font-size: 0.78em; color: #71717a;"><i class="fas fa-info-circle" style="color: #60a5fa;"></i> Neural2: $16/M chars (1M gratis/mes). WaveNet: $4/M chars (4M gratis/mes). Tono 100% consistente entre segmentos.</p>
+                  </div>
+
+                  <div id="groupSizeContainer" class="tv-form-group" style="display: block;">
+                      <label style="display: block; margin-bottom: 8px; font-size: 0.9em; color:#94a3b8;">
+                          <i class="fas fa-layer-group" style="color: #a78bfa; margin-right: 4px;"></i>
+                          Segmentos por grupo TTS: <strong id="groupSizeValue">3</strong>
+                      </label>
+                      <input type="range" id="groupSizeSlider" min="0" max="4" step="1" value="1"
+                          style="width: 100%; accent-color: #a78bfa; cursor: pointer;">
+                      <div style="display: flex; justify-content: space-between; font-size: 0.75em; color: #71717a; margin-top: 2px; padding: 0 2px;">
+                          <span>1</span><span>3</span><span>6</span><span>9</span><span>12</span>
+                      </div>
+                      <p style="margin: 6px 0 0; font-size: 0.78em; color: #71717a;"><i class="fas fa-info-circle" style="color: #60a5fa;"></i> Más segmentos por grupo = menos cambios de tono entre bloques, pero menos precisión en el timing.</p>
+                  </div>
+
+                  <div id="googleVoiceSelectContainer" class="tv-form-group" style="display: block;">
+                      <label style="display: block; margin-bottom: 8px; font-size: 0.9em; color:#94a3b8;">Voz de Google:</label>
+                      <select id="googleVoiceSelect">
+                          <!-- Voces Femeninas -->
+                          <option value="Zephyr">Zephyr (Brillante)</option>
+                          <option value="Kore">Kore (Firme)</option>
+                          <option value="Leda">Leda (Juvenil)</option>
+                          <option value="Aoede">Aoede (Breezy)</option>
+                          <option value="Callirrhoe">Callirrhoe (Relajada)</option>
+                          <option value="Autonoe">Autonoe (Brillo)</option>
+                          <option value="Algieba">Algieba (Suave)</option>
+                          <option value="Despina">Despina (Suave)</option>
+                          <option value="Erinome">Erinome (Despejado)</option>
+                          <option value="Algenib">Algenib (Arenoso)</option>
+                          <option value="Rasalgethi">Rasalgethi (Informativa)</option>
+                          <option value="Laomedeia">Laomedeia (Optimista)</option>
+                          <option value="Achernar">Achernar (Suave)</option>
+                          <option value="Gacrux">Gacrux (Contenido para mayores)</option>
+                          <option value="Pulcherrima">Pulcherrima (Reenviar)</option>
+                          <option value="Achird">Achird (Amistoso)</option>
+                          <option value="Vindemiatrix">Vindemiatrix (Suave)</option>
+                          <option value="Sadachbia">Sadachbia (Animada)</option>
+                          <option value="Sadaltager">Sadaltager (Conocimiento)</option>
+                          <option value="Sulafat">Sulafat (Cálida)</option>
+
+                          <!-- Voces Masculinas -->
+                          <option value="Puck">Puck (Optimista)</option>
+                          <option value="Charon">Charon (Informativa)</option>
+                          <option value="Fenrir">Fenrir (Excitabilidad)</option>
+                          <option value="Orus">Orus (Firme)</option>
+                          <option value="Enceladus">Enceladus (Sin aliento)</option>
+                          <option value="Iapetus">Iapetus (Claro)</option>
+                          <option value="Umbriel">Umbriel (Relajado)</option>
+                          <option value="Alnilam">Alnilam (Firme)</option>
+                          <option value="Schedar">Schedar (Par)</option>
+                          <option value="Zubenelgenubi">Zubenelgenubi (Informal)</option>
+                      </select>
+                      
+                      <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="randomVoiceCheckbox" style="margin: 0; cursor: pointer;">
+                        <label for="randomVoiceCheckbox" style="margin: 0; cursor: pointer; color: #cbd5e1; font-size: 0.9em;">
+                          <i class="fas fa-dice" style="color: #60a5fa; margin-right: 4px;"></i>
+                          Usar voz aleatoria por párrafo
+                        </label>
+                      </div>
+                  </div>
+                      
+                  <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
+                          <input type="checkbox" id="podcastStyleCheckbox" style="margin: 0; cursor: pointer;">
+                          <label for="podcastStyleCheckbox" style="margin: 0; cursor: pointer; color: #cbd5e1; font-size: 0.9em;">
+                            <i class="fas fa-microphone-lines" style="color: #34d399; margin-right: 4px;"></i>
+                            Estilo Podcast (Natural y Conversacional)
+                          </label>
+                      </div>
+
+                      <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
+                          <input type="checkbox" id="keepTempCheckbox" style="margin: 0; cursor: pointer;">
+                          <label for="keepTempCheckbox" style="margin: 0; cursor: pointer; color: #cbd5e1; font-size: 0.9em;">
+                            <i class="fas fa-file-audio" style="color: #fca5a5; margin-right: 4px;"></i>
+                            Mantener archivos temporales de audio
+                          </label>
+                      </div>
+
+                  <div class="tv-form-group" style="margin-top: 25px;">
+                      <div class="tv-section-title">
+                          <i class="fas fa-globe"></i> Idiomas de destino
+                      </div>
+                      <div class="tv-checkbox-grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="es" checked><span>Español 🇪🇸</span></label>                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="en" checked><span>Inglés 🇺🇸</span></label>
+                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="fr" checked><span>Francés 🇫🇷</span></label>
+                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="de" checked><span>Alemán 🇩🇪</span></label>
+                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="it" checked><span>Italiano 🇮🇹</span></label>
+                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="pt" checked><span>Portugués 🇵🇹</span></label>
+                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="ru" checked><span>Ruso 🇷🇺</span></label>
+                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="zh" checked><span>Chino 🇨🇳</span></label>
+                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="ko" checked><span>Coreano 🇰🇷</span></label>
+                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="ja" checked><span>Japonés 🇯🇵</span></label>
+                      </div>
+                  </div>
+              </div>
+
+          </aside>
+
+          <!-- Workspace -->
+          <main class="tv-workspace">
+              <nav class="tv-tabs">
+                  <button class="tv-tab-btn active" onclick="switchTab('auto')" id="tabBtnAuto">
+                      <i class="fas fa-robot"></i> Modo Automático
+                  </button>
+                  <button class="tv-tab-btn" onclick="switchTab('manual')" id="tabBtnManual">
+                      <i class="fas fa-sliders-h"></i> Modo Manual
+                  </button>
+                  <button class="tv-tab-btn" onclick="switchTab('costs')" id="tabBtnCosts">
+                      <i class="fas fa-chart-line"></i> Costos
+                  </button>
+              </nav>
+
+              <div class="tv-workspace-content">
+                <!-- AUTO TAB -->
+                <div id="tabContentAuto" class="tv-tab-content active tv-auto-container">
+                    <div class="tv-info-box" style="margin-bottom: 30px;">
+                        <i class="fas fa-magic"></i>
+                        <div class="tv-info-text">
+                            <p><strong>Modo Automático:</strong> Sube tu video y la IA se encargará de todo: transcripción, traducción y doblaje en los idiomas seleccionados.</p>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                        <div class="tv-form-group" style="display: flex; flex-direction: column; gap: 10px;">
+                            <label style="font-weight: 600; color: #e2e8f0;">Video Original (.mp4)</label>
+                            <div id="videoDropZone" class="tv-drop-zone">
+                                <i class="fas fa-film"></i>
+                                <p>Arrastra video aquí o <span style="color: #a78bfa; text-decoration: underline; cursor: pointer;">examina</span></p>
+                                <input type="file" id="videoUpload" accept=".mp4" style="display: none;">
+                                <p id="videoFileName" class="tv-file-name"></p>
+                            </div>
+                        </div>
+                        
+                        <div class="tv-form-group" style="display: flex; flex-direction: column; gap: 10px;">
+                            <label style="font-weight: 600; color: #e2e8f0;">Música de Fondo (Opcional)</label>
+                            <div id="musicDropZone" class="tv-drop-zone" style="border-color: #2d4a3e;">
+                                <i class="fas fa-music" style="color: #4ade80;"></i>
+                                <p>Arrastra música aquí o <span style="color: #4ade80; text-decoration: underline; cursor: pointer;">examina</span></p>
+                                <input type="file" id="musicUpload" accept=".mp3,.wav" style="display: none;">
+                                <p id="musicFileName" class="tv-file-name" style="color: #4ade80; background: rgba(74, 222, 128, 0.1);"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MANUAL TAB -->
+                <div id="tabContentManual" class="tv-tab-content">
+                    <div class="tv-info-box" style="margin-bottom: 25px;">
+                        <i class="fas fa-info-circle"></i>
+                        <div class="tv-info-text">
+                            <p><strong>Modo Manual:</strong> Sube los archivos de audio pre-generados para cada idioma.</p>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                         <div class="tv-form-group">
+                            <label style="font-weight: 600; margin-bottom: 8px; display: block;">Video Original (.mp4)</label>
+                            <div id="dropZone_manual_video" class="tv-drop-zone" style="min-height: 120px; padding: 20px;">
+                                <i class="fas fa-film" style="font-size: 1.8rem;"></i>
+                                <p style="font-size: 0.9em;">Click para subir video</p>
+                                <input type="file" id="videoUploadManual" accept=".mp4" style="display: none;">
+                                <p id="fileName_manual_video" class="tv-file-name"></p>
+                            </div>
+                        </div>
+                         <div class="tv-form-group">
+                            <label style="font-weight: 600; margin-bottom: 8px; display: block;">Música de Fondo</label>
+                            <div id="dropZone_manual_music" class="tv-drop-zone" style="min-height: 120px; padding: 20px; border-color: rgba(74, 222, 128, 0.3);">
+                                <i class="fas fa-music" style="font-size: 1.8rem; color: #4ade80;"></i>
+                                <p style="font-size: 0.9em;">Click para subir música</p>
+                                <input type="file" id="musicUploadManual" accept=".mp3,.wav" style="display: none;">
+                                <p id="fileName_manual_music" class="tv-file-name" style="color: #4ade80; background: rgba(74, 222, 128, 0.1);"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tv-form-group" style="background: #111113; border: 1px solid #27272a; border-radius: 10px; padding: 18px;">
+                        <label style="margin-bottom: 18px; display: block; color: #a78bfa; font-size: 1.05em; border-bottom: 1px solid #27272a; padding-bottom: 10px; font-weight: 600;">
+                            <i class="fas fa-language"></i> Audios por Idioma
+                        </label>
+                        
+                        <div class="tv-audio-grid">
+                            <div class="tv-audio-card">
+                                <label>�🇸 Español (es)</label>
+                                <div id="dropZone_manual_es" class="tv-drop-zone" style="padding: 15px; min-height: 80px;">
+                                    <i class="fas fa-file-audio" style="font-size: 1.5rem; margin-bottom: 5px;"></i>
+                                    <span style="font-size: 0.8rem; display: block; color: #94a3b8;">Subir audio ES</span>
+                                    <input type="file" id="manual_audio_es" accept=".mp3,.wav" style="display: none;">
+                                    <p id="fileName_manual_es" class="tv-file-name" style="font-size: 0.75em; margin-top: 5px;"></p>
+                                </div>
+                            </div>
+                            <div class="tv-audio-card">
+                                <label>�🇺🇸 Inglés (en)</label>
+                                <div id="dropZone_manual_en" class="tv-drop-zone" style="padding: 15px; min-height: 80px;">
+                                    <i class="fas fa-file-audio" style="font-size: 1.5rem; margin-bottom: 5px;"></i>
+                                    <span style="font-size: 0.8rem; display: block; color: #94a3b8;">Subir audio EN</span>
+                                    <input type="file" id="manual_audio_en" accept=".mp3,.wav" style="display: none;">
+                                    <p id="fileName_manual_en" class="tv-file-name" style="font-size: 0.75em; margin-top: 5px;"></p>
+                                </div>
+                            </div>
+                            <!-- (Other languages simplified for brevity in replacement, but I will keep them to ensure functionality) -->
+                            <div class="tv-audio-card"><label>🇫🇷 Francés (fr)</label><div id="dropZone_manual_fr" class="tv-drop-zone" style="padding: 15px; min-height: 80px;"><i class="fas fa-file-audio" style="font-size: 1.5rem;"></i><input type="file" id="manual_audio_fr" accept=".mp3,.wav" style="display: none;"><p id="fileName_manual_fr" class="tv-file-name" style="font-size: 0.75em;"></p></div></div>
+                            <div class="tv-audio-card"><label>🇩🇪 Alemán (de)</label><div id="dropZone_manual_de" class="tv-drop-zone" style="padding: 15px; min-height: 80px;"><i class="fas fa-file-audio" style="font-size: 1.5rem;"></i><input type="file" id="manual_audio_de" accept=".mp3,.wav" style="display: none;"><p id="fileName_manual_de" class="tv-file-name" style="font-size: 0.75em;"></p></div></div>
+                            <div class="tv-audio-card"><label>🇮🇹 Italiano (it)</label><div id="dropZone_manual_it" class="tv-drop-zone" style="padding: 15px; min-height: 80px;"><i class="fas fa-file-audio" style="font-size: 1.5rem;"></i><input type="file" id="manual_audio_it" accept=".mp3,.wav" style="display: none;"><p id="fileName_manual_it" class="tv-file-name" style="font-size: 0.75em;"></p></div></div>
+                            <div class="tv-audio-card"><label>🇵🇹 Portugués (pt)</label><div id="dropZone_manual_pt" class="tv-drop-zone" style="padding: 15px; min-height: 80px;"><i class="fas fa-file-audio" style="font-size: 1.5rem;"></i><input type="file" id="manual_audio_pt" accept=".mp3,.wav" style="display: none;"><p id="fileName_manual_pt" class="tv-file-name" style="font-size: 0.75em;"></p></div></div>
+                            <div class="tv-audio-card"><label>🇷🇺 Ruso (ru)</label><div id="dropZone_manual_ru" class="tv-drop-zone" style="padding: 15px; min-height: 80px;"><i class="fas fa-file-audio" style="font-size: 1.5rem;"></i><input type="file" id="manual_audio_ru" accept=".mp3,.wav" style="display: none;"><p id="fileName_manual_ru" class="tv-file-name" style="font-size: 0.75em;"></p></div></div>
+                            <div class="tv-audio-card"><label>🇨🇳 Chino (zh)</label><div id="dropZone_manual_zh" class="tv-drop-zone" style="padding: 15px; min-height: 80px;"><i class="fas fa-file-audio" style="font-size: 1.5rem;"></i><input type="file" id="manual_audio_zh" accept=".mp3,.wav" style="display: none;"><p id="fileName_manual_zh" class="tv-file-name" style="font-size: 0.75em;"></p></div></div>
+                            <div class="tv-audio-card"><label>🇰🇷 Coreano (ko)</label><div id="dropZone_manual_ko" class="tv-drop-zone" style="padding: 15px; min-height: 80px;"><i class="fas fa-file-audio" style="font-size: 1.5rem;"></i><input type="file" id="manual_audio_ko" accept=".mp3,.wav" style="display: none;"><p id="fileName_manual_ko" class="tv-file-name" style="font-size: 0.75em;"></p></div></div>
+                            <div class="tv-audio-card"><label>🇯🇵 Japonés (ja)</label><div id="dropZone_manual_ja" class="tv-drop-zone" style="padding: 15px; min-height: 80px;"><i class="fas fa-file-audio" style="font-size: 1.5rem;"></i><input type="file" id="manual_audio_ja" accept=".mp3,.wav" style="display: none;"><p id="fileName_manual_ja" class="tv-file-name" style="font-size: 0.75em;"></p></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COSTS TAB -->
+                <div id="tabContentCosts" class="tv-tab-content" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2 style="margin: 0; font-size: 1.3em; color: #e2e8f0; font-weight: 700;">
+                            <i class="fas fa-chart-line" style="color: #a78bfa; margin-right: 8px;"></i>Dashboard de Costos API
+                        </h2>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <button id="costCurrencyToggle" onclick="toggleCostCurrency()" style="padding: 6px 14px; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #a78bfa; font-size: 0.85em; cursor: pointer; font-weight: 600;">
+                                <i class="fas fa-exchange-alt"></i> <span id="currencyLabel">USD</span>
+                            </button>
+                            <button onclick="clearCostHistory()" style="padding: 6px 14px; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #ef4444; font-size: 0.85em; cursor: pointer; font-weight: 600;">
+                                <i class="fas fa-trash"></i> Limpiar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Summary Cards -->
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px;">
+                        <div style="background: linear-gradient(135deg, #1e1b4b, #312e81); border: 1px solid #4338ca; border-radius: 12px; padding: 18px;">
+                            <div style="font-size: 0.8em; color: #a5b4fc; margin-bottom: 6px;"><i class="fas fa-dollar-sign"></i> Costo Total</div>
+                            <div id="costTotalDisplay" style="font-size: 1.6em; font-weight: 800; color: #fff;">$0.00</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #1a1a2e, #16213e); border: 1px solid #334155; border-radius: 12px; padding: 18px;">
+                            <div style="font-size: 0.8em; color: #94a3b8; margin-bottom: 6px;"><i class="fas fa-video"></i> Videos Procesados</div>
+                            <div id="costVideoCount" style="font-size: 1.6em; font-weight: 800; color: #fff;">0</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #1a1a2e, #16213e); border: 1px solid #334155; border-radius: 12px; padding: 18px;">
+                            <div style="font-size: 0.8em; color: #94a3b8; margin-bottom: 6px;"><i class="fas fa-calendar-day"></i> Promedio/Día</div>
+                            <div id="costAvgDay" style="font-size: 1.6em; font-weight: 800; color: #fff;">$0.00</div>
+                        </div>
+                    </div>
+
+                    <!-- Chart -->
+                    <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                        <h3 style="margin: 0 0 14px; font-size: 1em; color: #a1a1aa; font-weight: 600;">Costo por Día</h3>
+                        <div style="position: relative; height: 260px;">
+                            <canvas id="costChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Detail Table -->
+                    <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; overflow: hidden;">
+                        <h3 style="margin: 0; padding: 14px 18px; font-size: 1em; color: #a1a1aa; font-weight: 600; border-bottom: 1px solid #27272a;">Historial Detallado</h3>
+                        <div style="max-height: 350px; overflow-y: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.85em;">
+                                <thead>
+                                    <tr style="background: #09090b; position: sticky; top: 0;">
+                                        <th style="padding: 10px 14px; text-align: left; color: #71717a; font-weight: 600;">Fecha</th>
+                                        <th style="padding: 10px 14px; text-align: left; color: #71717a; font-weight: 600;">Video</th>
+                                        <th style="padding: 10px 14px; text-align: left; color: #71717a; font-weight: 600;">Idiomas</th>
+                                        <th style="padding: 10px 14px; text-align: right; color: #71717a; font-weight: 600;">Costo</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="costTableBody">
+                                    <tr><td colspan="4" style="padding: 30px; text-align: center; color: #52525b;">Sin datos aún</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Model Breakdown -->
+                    <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 18px; margin-top: 16px;">
+                        <h3 style="margin: 0 0 14px; font-size: 1em; color: #a1a1aa; font-weight: 600;">Desglose por Modelo</h3>
+                        <div id="costModelBreakdown" style="color: #71717a; font-size: 0.9em;">Sin datos</div>
+                    </div>
+                </div>
+
+              </div>
+
+              <div id="translateVideoProgress" style="display: none; margin: 0 20px; padding: 20px 24px; background: #18181b; border: 1px solid #27272a; border-radius: 12px;">
+                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                      <i class="fas fa-spinner fa-spin" style="color: #818cf8; font-size: 1.1em;"></i>
+                      <span style="color: #e2e8f0; font-weight: 600; font-size: 1em;">Procesando...</span>
+                  </div>
+                  <div id="translateVideoStatus" style="font-size: 0.9em; color: #a1a1aa; margin-bottom: 10px; min-height: 1.4em; word-break: break-word;">
+                      Iniciando...
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                      <div style="flex: 1; background: rgba(0,0,0,0.4); height: 10px; border-radius: 5px; overflow: hidden;">
+                          <div id="translateVideoProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #6366f1, #a78bfa); transition: width 0.3s ease; border-radius: 5px;"></div>
+                      </div>
+                      <span id="translateVideoPercent" style="font-weight: 700; color: #fff; font-size: 1.1em; min-width: 40px; text-align: right;">0%</span>
+                  </div>
+                  <div id="translateVideoTimeRemaining" style="text-align: right; font-size: 0.8em; color: #64748b;">
+                      Calculando...
+                  </div>
+                  <button id="retryBtn" style="display: none; width: 100%; margin-top: 12px; padding: 10px 0; background: #dc2626; border: none; border-radius: 8px; color: #fff; font-weight: 600; font-size: 0.9em; cursor: pointer; transition: background 0.2s;"
+                      onmouseover="this.style.background='#ef4444'" onmouseout="this.style.background='#dc2626'">
+                      <i class="fas fa-redo"></i> Reintentar
+                  </button>
+              </div>
+
+              <div class="tv-action-bar">
+                  <button id="generateTranslatedVideoBtn" class="save-btn" style="padding: 12px 28px; font-size: 0.95rem; background: #7c3aed; border: 1px solid #6d28d9; color: white; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.15s; letter-spacing: -0.2px;">
+                      <i class="fas fa-rocket" style="margin-right: 8px;"></i> Generar Audios de Traducción (IA)
+                  </button>
+              </div>
+          </main>
+      </div>
+  </div>
+
+  <script>
+  // ==============================
+  // FIREBASE AUTH + FIRESTORE ADMIN
+  // ==============================
+  const firebaseConfig = {
+      apiKey: "AIzaSyA_A2Sfb9ulOsVEwA5C4H9_QX3yNZQlpug",
+      authDomain: "traductor-video-ia.firebaseapp.com",
+      projectId: "traductor-video-ia",
+      storageBucket: "traductor-video-ia.firebasestorage.app",
+      messagingSenderId: "786779898514",
+      appId: "1:786779898514:web:b2df957c4eb332d4aa5c4b"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+  const ADMIN_EMAIL = 'jairedson5@gmail.com';
+  let authToken = null;
+  let currentUser = null;
+
+  // Sign in with Google popup
+  async function signInWithGoogle() {
+      try {
+          await auth.signInWithPopup(googleProvider);
+      } catch (error) {
+          if (error.code !== 'auth/popup-closed-by-user') {
+              console.error('Sign-in error:', error);
+              alert('Error al iniciar sesión: ' + error.message);
+          }
+      }
+  }
+
+  // Get or create user doc in Firestore
+  async function getOrCreateUserDoc(firebaseUser) {
+      const userRef = db.collection('users').doc(firebaseUser.uid);
+      const userDoc = await userRef.get();
+      const isAdmin = firebaseUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+      if (!userDoc.exists) {
+          const userData = {
+              email: firebaseUser.email,
+              name: firebaseUser.displayName || '',
+              picture: firebaseUser.photoURL || '',
+              status: isAdmin ? 'approved' : 'pending',
+              isAdmin: isAdmin,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+              lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+          };
+          await userRef.set(userData);
+          console.log('👤 Nuevo usuario:', firebaseUser.email, isAdmin ? '(ADMIN)' : '(pendiente)');
+          return userData;
+      } else {
+          const data = userDoc.data();
+          const updates = { lastLogin: firebase.firestore.FieldValue.serverTimestamp() };
+          if (isAdmin && !data.isAdmin) { updates.isAdmin = true; updates.status = 'approved'; }
+          await userRef.update(updates);
+          return { ...data, ...updates, isAdmin: isAdmin || data.isAdmin };
+      }
+  }
+
+  // Handle user status after auth
+  function handleUserStatus(user) {
+      document.getElementById('loginOverlay').classList.add('hidden');
+      if (user.status === 'approved') {
+          document.getElementById('pendingOverlay').classList.add('hidden');
+          showApp(user);
+      } else if (user.status === 'denied') {
+          showPendingScreen('Acceso denegado', 'El administrador ha denegado el acceso a tu cuenta.', 'fas fa-ban', true);
+      } else {
+          showPendingScreen('Esperando aprobación', 'Tu cuenta ha sido registrada. El administrador debe aprobar tu acceso.', 'fas fa-hourglass-half', false);
+      }
+  }
+
+  function showPendingScreen(title, message, iconClass, isDenied) {
+      document.getElementById('pendingOverlay').classList.remove('hidden');
+      document.getElementById('pendingTitle').textContent = title;
+      document.getElementById('pendingMessage').textContent = message;
+      document.getElementById('pendingMessage').className = isDenied ? 'denied-text' : '';
+      document.getElementById('pendingIcon').className = iconClass;
+      document.getElementById('appContainer').style.display = 'none';
+  }
+
+  function showApp(user) {
+      document.getElementById('loginOverlay').classList.add('hidden');
+      document.getElementById('pendingOverlay').classList.add('hidden');
+      document.getElementById('appContainer').style.display = '';
+      document.getElementById('userProfile').style.display = 'flex';
+      document.getElementById('userName').textContent = user.name || user.email;
+      if (user.picture) document.getElementById('userAvatar').src = user.picture;
+      else document.getElementById('userAvatar').style.display = 'none';
+      document.getElementById('adminPanelBtn').style.display = user.isAdmin ? '' : 'none';
+  }
+
+  async function logout() {
+      await auth.signOut();
+      authToken = null;
+      currentUser = null;
+      document.getElementById('loginOverlay').classList.remove('hidden');
+      document.getElementById('pendingOverlay').classList.add('hidden');
+      document.getElementById('appContainer').style.display = 'none';
+      document.getElementById('userProfile').style.display = 'none';
+  }
+
+  // Intercept fetch to attach Firebase auth token
+  const _originalFetch = window.fetch;
+  window.fetch = function(url, options = {}) {
+      if (authToken && typeof url === 'string' && url.startsWith('/api/')) {
+          options.headers = options.headers || {};
+          if (options.headers instanceof Headers) {
+              options.headers.set('Authorization', 'Bearer ' + authToken);
+          } else {
+              options.headers['Authorization'] = 'Bearer ' + authToken;
+          }
+      }
+      return _originalFetch.call(this, url, options);
+  };
+
+  // ── Admin Panel (Firestore) ──
+
+  function openAdminPanel() {
+      document.getElementById('adminPanelOverlay').classList.remove('hidden');
+      loadAdminUsers();
+  }
+
+  function closeAdminPanel() {
+      document.getElementById('adminPanelOverlay').classList.add('hidden');
+  }
+
+  async function loadAdminUsers() {
+      const container = document.getElementById('adminUserList');
+      container.innerHTML = '<p style="color: #71717a; text-align: center;">Cargando usuarios...</p>';
+      try {
+          const snapshot = await db.collection('users').get();
+          const users = [];
+          snapshot.forEach(doc => users.push({ uid: doc.id, ...doc.data() }));
+          users.sort((a, b) => {
+              const order = { pending: 0, approved: 1, denied: 2 };
+              return (order[a.status] ?? 3) - (order[b.status] ?? 3);
+          });
+          renderAdminUsers(users);
+      } catch (err) {
+          container.innerHTML = '<p style="color: #f87171; text-align: center;">Error: ' + err.message + '</p>';
+      }
+  }
+
+  function renderAdminUsers(users) {
+      const container = document.getElementById('adminUserList');
+      if (!users.length) {
+          container.innerHTML = '<p style="color: #71717a; text-align: center;">No hay usuarios registrados</p>';
+          return;
+      }
+      container.innerHTML = users.map(u => {
+          const lastLogin = u.lastLogin && u.lastLogin.toDate ? u.lastLogin.toDate().toLocaleString('es-MX') : 'Recién creado';
+          const initial = (u.name || u.email || '?')[0].toUpperCase();
+          const avatar = u.picture || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%2327272a' width='100' height='100'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.35em' font-size='40' fill='%23a1a1aa'%3E" + initial + "%3C/text%3E%3C/svg%3E";
+          const actions = u.isAdmin
+              ? '<span style="color: #a78bfa; font-size: 0.8rem; font-weight: 600;"><i class="fas fa-crown"></i> Admin</span>'
+              : `<div class="admin-user-actions">
+                    ${u.status !== 'approved' ? `<button class="admin-action-btn approve" onclick="updateUserStatus('${u.uid}', 'approved')"><i class="fas fa-check"></i> Aprobar</button>` : ''}
+                    ${u.status !== 'denied' ? `<button class="admin-action-btn deny" onclick="updateUserStatus('${u.uid}', 'denied')"><i class="fas fa-ban"></i> Denegar</button>` : ''}
+                    <button class="admin-action-btn delete" onclick="deleteUser('${u.uid}', '${u.email}')"><i class="fas fa-trash"></i></button>
+                 </div>`;
+          return `
+              <div class="admin-user-row">
+                  <img src="${avatar}" alt="">
+                  <div class="admin-user-info">
+                      <div class="admin-user-name">${u.name || 'Sin nombre'}</div>
+                      <div class="admin-user-email">${u.email}</div>
+                      <div class="admin-user-date">Último acceso: ${lastLogin}</div>
+                  </div>
+                  <span class="admin-status-badge ${u.status}">${u.status === 'approved' ? 'Aprobado' : u.status === 'denied' ? 'Denegado' : 'Pendiente'}</span>
+                  ${actions}
+              </div>`;
+      }).join('');
+  }
+
+  async function updateUserStatus(uid, status) {
+      try {
+          await db.collection('users').doc(uid).update({ status });
+          loadAdminUsers();
+      } catch (err) { alert('Error: ' + err.message); }
+  }
+
+  async function deleteUser(uid, email) {
+      if (!confirm('¿Eliminar a ' + email + '?')) return;
+      try {
+          await db.collection('users').doc(uid).delete();
+          loadAdminUsers();
+      } catch (err) { alert('Error: ' + err.message); }
+  }
+
+  // ── Firebase Auth State Listener ──
+
+  let tokenRefreshInterval = null;
+  auth.onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+          try {
+              authToken = await firebaseUser.getIdToken();
+              const userDoc = await getOrCreateUserDoc(firebaseUser);
+              currentUser = {
+                  uid: firebaseUser.uid,
+                  email: firebaseUser.email,
+                  name: firebaseUser.displayName,
+                  picture: firebaseUser.photoURL,
+                  status: userDoc.status,
+                  isAdmin: userDoc.isAdmin || false,
+              };
+              handleUserStatus(currentUser);
+              // Auto-refresh token every 30 min
+              if (tokenRefreshInterval) clearInterval(tokenRefreshInterval);
+              tokenRefreshInterval = setInterval(async () => {
+                  try { authToken = await firebaseUser.getIdToken(true); }
+                  catch (e) { console.warn('Token refresh failed:', e); }
+              }, 30 * 60 * 1000);
+          } catch (err) {
+              console.error('Error loading user:', err);
+              alert('Error cargando datos de usuario');
+          }
+      } else {
+          authToken = null;
+          currentUser = null;
+          if (tokenRefreshInterval) { clearInterval(tokenRefreshInterval); tokenRefreshInterval = null; }
+          document.getElementById('loginOverlay').classList.remove('hidden');
+          document.getElementById('pendingOverlay').classList.add('hidden');
+          document.getElementById('appContainer').style.display = 'none';
+      }
+  });
+
+  // ── Init ──
+  window.addEventListener('load', () => {
+      document.getElementById('googleSignInBtn').addEventListener('click', signInWithGoogle);
+      document.getElementById('logoutBtn').addEventListener('click', logout);
+      document.getElementById('pendingLogoutBtn').addEventListener('click', logout);
+      document.getElementById('adminPanelBtn').addEventListener('click', openAdminPanel);
+      document.getElementById('adminCloseBtn').addEventListener('click', closeAdminPanel);
+      document.getElementById('adminPanelOverlay').addEventListener('click', (e) => {
+          if (e.target === e.currentTarget) closeAdminPanel();
+      });
+  });
+  </script>
+  <script src="translate-video.js?v=48229219437"></script>
+</body>
+</html>

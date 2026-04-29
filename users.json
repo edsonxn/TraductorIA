@@ -1,0 +1,20 @@
+{
+  "jairedson5@gmail.com": {
+    "email": "jairedson5@gmail.com",
+    "name": "Edsonxn",
+    "picture": "https://lh3.googleusercontent.com/a/ACg8ocJJa0zQR0c9vFecuYO_fiI7C3vVlDqgadzy1UOrqhTLORj97u6OKA=s96-c",
+    "status": "approved",
+    "isAdmin": true,
+    "createdAt": "2026-04-25T21:48:56.749Z",
+    "lastLogin": "2026-04-26T14:12:36.749Z"
+  },
+  "cronicas.warcraft@gmail.com": {
+    "email": "cronicas.warcraft@gmail.com",
+    "name": "Edosn Jair",
+    "picture": "https://lh3.googleusercontent.com/a/ACg8ocLPSYZTF-tncCaSPiCLvzpmbsHRCDo85qSkX3UgHM9wx9CTG0I=s96-c",
+    "status": "pending",
+    "isAdmin": false,
+    "createdAt": "2026-04-25T21:50:57.094Z",
+    "lastLogin": "2026-04-25T21:50:57.094Z"
+  }
+}

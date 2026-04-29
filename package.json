@@ -1,0 +1,81 @@
+{
+  "name": "traductor-video-ia",
+  "version": "1.0.0",
+  "description": "Traductor de Video con IA - Transcripción, traducción y doblaje automático",
+  "main": "electron-main.cjs",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "electron": "electron .",
+    "prebuild": "node -e \"const fs=require('fs');fs.copyFileSync('.env','.env.bak');fs.copyFileSync('.env.build','.env');console.log('Swapped .env for build (keys removed)')\"",
+    "build": "electron-builder --win",
+    "postbuild": "node -e \"const fs=require('fs');if(fs.existsSync('.env.bak')){fs.copyFileSync('.env.bak','.env');fs.unlinkSync('.env.bak');console.log('Restored original .env')}\"",
+    "build:dir": "electron-builder --win --dir"
+  },
+  "author": "Edson Jair Iniguez",
+  "license": "MIT",
+  "build": {
+    "appId": "com.edsonjair.traductor-video-ia",
+    "productName": "Traductor de Video IA",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron-main.cjs",
+      "index.js",
+      "package.json",
+      ".env",
+      "public/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Traductor de Video IA"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/**/*"
+    ]
+  },
+  "dependencies": {
+    "@google-cloud/text-to-speech": "^6.4.0",
+    "@google/genai": "^1.14.0",
+    "@google/generative-ai": "^0.10.0",
+    "archiver": "^7.0.1",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.0",
+    "express": "^5.1.0",
+    "google-auth-library": "^10.6.2",
+    "multer": "^2.0.2",
+    "wav": "^1.0.2"
+  },
+  "devDependencies": {
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1"
+  }
+}
