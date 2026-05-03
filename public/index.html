@@ -870,6 +870,23 @@
                   </small>
               </div>
 
+              <div class="tv-form-group">
+                  <label style="color: #cbd5e1; font-size: 0.9em; font-weight: 500; display: block; margin-bottom: 6px;">
+                    <i class="fas fa-folder-open" style="color: #fbbf24; margin-right: 4px;"></i>
+                    Carpeta de Outputs
+                  </label>
+                  <div style="display: flex; gap: 6px; align-items: center;">
+                      <input type="text" id="outputDirInput" readonly
+                          style="flex: 1; padding: 6px 10px; background: #18181b; border: 1px solid #3f3f46; border-radius: 6px; color: #a1a1aa; font-size: 0.8em; overflow: hidden; text-overflow: ellipsis;">
+                      <button onclick="changeOutputDir()" style="padding: 6px 10px; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fbbf24; font-size: 0.8em; cursor: pointer; white-space: nowrap;">
+                          <i class="fas fa-pen"></i>
+                      </button>
+                  </div>
+                  <small style="color: #64748b; display: block; margin-top: 4px; font-size: 0.78em; line-height: 1.4;">
+                    Ruta donde se guardan los videos traducidos.
+                  </small>
+              </div>
+
               <div id="autoSettingsPanel">
                   <div class="tv-form-group">
                       <div class="tv-section-title">

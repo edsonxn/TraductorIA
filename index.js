@@ -1146,6 +1146,33 @@ app.get('/api/settings/output-dir', (req, res) => {
     res.json({ outputsDir: globalOutputDir });
 });
 
+app.post('/api/settings/pick-output-dir', async (req, res) => {
+    try {
+        // Open native Windows folder picker via PowerShell
+        const ps = spawn('powershell', ['-NoProfile', '-Command', `
+            Add-Type -AssemblyName System.Windows.Forms
+            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+            $dialog.Description = "Seleccionar carpeta de outputs"
+            $dialog.SelectedPath = "${globalOutputDir.replace(/\\/g, '\\\\')}"
+            $dialog.ShowNewFolderButton = $true
+            if ($dialog.ShowDialog() -eq 'OK') { Write-Output $dialog.SelectedPath }
+            else { Write-Output "" }
+        `]);
+        let output = '';
+        ps.stdout.on('data', d => output += d.toString());
+        ps.on('close', (code) => {
+            const selected = output.trim();
+            if (!selected) return res.json({ cancelled: true, outputsDir: globalOutputDir });
+            globalOutputDir = selected;
+            if (!fs.existsSync(globalOutputDir)) fs.mkdirSync(globalOutputDir, { recursive: true });
+            fs.writeFileSync(settingsPath, JSON.stringify({ outputsDir: globalOutputDir }, null, 2));
+            res.json({ success: true, outputsDir: globalOutputDir });
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/settings/output-dir', (req, res) => {
     try {
         const newDir = req.body.outputsDir;
@@ -1244,8 +1271,10 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
             sendStatus('Extrayendo audio...', 20);
             await new Promise((resolve, reject) => {
                 const ffmpeg = spawn('ffmpeg', ['-y', '-i', videoPath, '-vn', '-acodec', 'libmp3lame', audioPath]);
+                let stderr = '';
+                ffmpeg.stderr.on('data', (data) => { stderr += data.toString(); });
                 ffmpeg.on('error', (err) => reject(err.code === 'ENOENT' ? new Error('FFmpeg no está instalado o no se encuentra en el PATH.') : err));
-                ffmpeg.on('close', (code) => code === 0 ? resolve() : reject(new Error('FFmpeg error extracting audio')));
+                ffmpeg.on('close', (code) => code === 0 ? resolve() : reject(new Error(`FFmpeg error extracting audio (code ${code}): ${stderr.slice(-300)}`)));
             });
         }
 
@@ -1260,6 +1289,8 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
                 else reject(new Error('FFprobe error'));
             });
         });
+
+        const endScreenSeconds = Math.max(0, parseInt(req.body.endScreenSeconds) || 0);
 
         // 2. Transcribe
         let transcriptionResult = null;
@@ -1291,6 +1322,29 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
             fs.writeFileSync(transcriptionJsonPath, JSON.stringify(transcriptionResult, null, 2));
         }
 
+        // Filter out empty segments (music, SFX, pauses) — their time becomes natural silence via gaps
+        if (transcriptionResult.segments && transcriptionResult.segments.length > 0) {
+            const before = transcriptionResult.segments.length;
+            transcriptionResult.segments = transcriptionResult.segments.filter(s => s.text && s.text.trim());
+            const after = transcriptionResult.segments.length;
+            if (before !== after) {
+                console.log(`🧹 Filtrados ${before - after} segmentos vacíos (${before} → ${after})`);
+            }
+        }
+
+        // Filter segments that fall in the end screen zone (music/silence at the end)
+        if (endScreenSeconds > 0 && videoDuration > 0 && transcriptionResult.segments?.length > 0) {
+            const speechCutoff = videoDuration - endScreenSeconds;
+            const before = transcriptionResult.segments.length;
+            transcriptionResult.segments = transcriptionResult.segments.filter(s => s.start < speechCutoff);
+            const after = transcriptionResult.segments.length;
+            if (before !== after) {
+                console.log(`🔇 Filtrados ${before - after} segmentos en zona de pantalla final (start >= ${speechCutoff.toFixed(1)}s)`);
+            }
+            // Rebuild transcript from filtered segments
+            transcriptionResult.transcript = transcriptionResult.segments.map(s => s.text).join(' ');
+        }
+
         originalText = transcriptionResult.transcript;
         if (!originalText) throw new Error('La transcripción del audio falló o devolvió texto vacío.');
 
@@ -1320,7 +1374,6 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
 
         let progress = 50;
         const progressStep = 40 / languages.length;
-        const endScreenSeconds = Math.max(0, parseInt(req.body.endScreenSeconds) || 0);
         const costTracker = createCostTracker();
 
         for (const lang of languages) {
@@ -1348,7 +1401,12 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
 
                 if (fs.existsSync(segTransPath)) {
                     translatedTexts = JSON.parse(fs.readFileSync(segTransPath, 'utf8'));
-                } else {
+                    if (translatedTexts.length !== transcriptionResult.segments.length) {
+                        console.log(`⚠️ Cache de traducción (${translatedTexts.length}) no coincide con segmentos (${transcriptionResult.segments.length}), re-traduciendo...`);
+                        translatedTexts = null;
+                    }
+                }
+                if (!translatedTexts) {
                     sendStatus(`Traduciendo segmentos a ${langNames[lang]}...`, progress);
                     translatedTexts = await translateSegmentsBatch(
                         transcriptionResult.segments, lang, langNames[lang],
@@ -1530,12 +1588,8 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
                         }
                     }
 
-                    // Padding al final para pantalla final de YouTube
-                    if (endScreenSeconds > 0) {
-                        const padPath = path.join(segDir, 'end_pad.wav');
-                        if (!fs.existsSync(padPath)) await generateSilence(padPath, endScreenSeconds);
-                        timeline.push(padPath);
-                    }
+                    // No end_pad needed: end screen zone segments are already filtered out,
+                    // and the final mix's apad+atrim pads with silence to videoDuration
 
                     // Concatenar todo usando rutas absolutas
                     const listPath = path.join(segDir, 'concat.txt');

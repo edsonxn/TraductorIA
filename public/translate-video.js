@@ -43,6 +43,7 @@ window.getFromDB = async function(storeName, key) {
     window.switchTab('auto');
     window.toggleVoiceSelect();
     loadPreferences();
+    loadOutputDir();
 
     // Group Size slider
     const groupSlider = document.getElementById('groupSizeSlider');
@@ -628,17 +629,21 @@ function renderCostDashboard() {
 
     // Average per day
     if (costs.length > 0) {
-        const days = new Set(costs.map(c => c.date.slice(0, 10)));
+        const days = new Set(costs.map(c => {
+            const d = new Date(c.date);
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }));
         const avgPerDay = totalUSD / days.size;
         document.getElementById('costAvgDay').textContent = fmt$(avgPerDay);
     } else {
         document.getElementById('costAvgDay').textContent = fmt$(0);
     }
 
-    // Aggregate by day for chart
+    // Aggregate by day for chart (local time)
     const byDay = {};
     costs.forEach(c => {
-        const day = c.date.slice(0, 10);
+        const d = new Date(c.date);
+        const day = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         byDay[day] = (byDay[day] || 0) + (c.totalUSD || 0);
     });
     const sortedDays = Object.keys(byDay).sort();
@@ -762,6 +767,33 @@ window.clearCostHistory = async function() {
         renderCostDashboard();
     } catch (e) {
         alert('Error al borrar: ' + e.message);
+    }
+};
+
+// ==============================
+// OUTPUT DIRECTORY CONFIG
+// ==============================
+async function loadOutputDir() {
+    try {
+        const resp = await fetch('/api/settings/output-dir');
+        const data = await resp.json();
+        const input = document.getElementById('outputDirInput');
+        if (input && data.outputsDir) input.value = data.outputsDir;
+    } catch (e) {}
+}
+
+window.changeOutputDir = async function() {
+    try {
+        const btn = document.querySelector('[onclick="changeOutputDir()"]');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+        const resp = await fetch('/api/settings/pick-output-dir', { method: 'POST' });
+        const data = await resp.json();
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-pen"></i>'; }
+        if (data.success) {
+            document.getElementById('outputDirInput').value = data.outputsDir;
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
     }
 };
 
