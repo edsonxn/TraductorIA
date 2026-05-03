@@ -6,6 +6,7 @@ whisper_models/
 dist/
 __pycache__/
 costs.json
+settings.json
 .env
 *.mp4
 *.mp3

@@ -228,8 +228,14 @@ try {
     console.error("Error cargando settings.json:", e);
 }
 
-if (!fs.existsSync(globalOutputDir)) {
-    fs.mkdirSync(globalOutputDir, { recursive: true });
+try {
+    if (!fs.existsSync(globalOutputDir)) {
+        fs.mkdirSync(globalOutputDir, { recursive: true });
+    }
+} catch (e) {
+    console.warn(`⚠️ No se pudo crear outputsDir "${globalOutputDir}", usando default.`);
+    globalOutputDir = path.join(process.cwd(), 'outputs');
+    if (!fs.existsSync(globalOutputDir)) fs.mkdirSync(globalOutputDir, { recursive: true });
 }
 
 // ==============================
