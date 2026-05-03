@@ -318,9 +318,10 @@ async function transcribeAudioWithGemini(audioPath, clientKeys = null) {
     const mimeType = ext === '.wav' ? 'audio/wav' : ext === '.m4a' ? 'audio/m4a' : 'audio/mpeg';
 
     const prompt = `Transcribe this audio accurately. Return ONLY a valid JSON object with this exact structure, no markdown, no code blocks:
-{"transcript": "the full transcription text here", "segments": [{"start": 0.0, "end": 2.5, "text": "segment text"}]}
+{"language": "es", "transcript": "the full transcription text here", "segments": [{"start": 0.0, "end": 2.5, "text": "segment text"}]}
 
 Rules:
+- "language" must be the ISO 639-1 code of the detected spoken language (e.g. "es", "en", "fr", "de", "pt", "it", "ru", "zh", "ko", "ja")
 - "transcript" must contain the complete transcription as a single string
 - "segments" is an array where each segment has "start" (seconds), "end" (seconds), and "text"
 - Each segment should contain ONE sentence or short phrase only
@@ -1413,16 +1414,23 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
                     }
                 }
                 if (!translatedTexts) {
-                    sendStatus(`Traduciendo segmentos a ${langNames[lang]}...`, progress);
-                    translatedTexts = await translateSegmentsBatch(
-                        transcriptionResult.segments, lang, langNames[lang],
-                        {
-                            translationModel: req.body.translationModel,
-                            podcastStyle: req.body.podcastStyle === 'true',
-                            clientKeys,
-                            costTracker
-                        }
-                    );
+                    const detectedLang = transcriptionResult.language || null;
+                    if (detectedLang && detectedLang === lang) {
+                        console.log(`🔄 Idioma detectado (${detectedLang}) coincide con target (${lang}), usando textos originales`);
+                        sendStatus(`Idioma original detectado: ${langNames[lang]}. Usando transcripción original...`, progress);
+                        translatedTexts = transcriptionResult.segments.map(s => s.text);
+                    } else {
+                        sendStatus(`Traduciendo segmentos a ${langNames[lang]}...`, progress);
+                        translatedTexts = await translateSegmentsBatch(
+                            transcriptionResult.segments, lang, langNames[lang],
+                            {
+                                translationModel: req.body.translationModel,
+                                podcastStyle: req.body.podcastStyle === 'true',
+                                clientKeys,
+                                costTracker
+                            }
+                        );
+                    }
                     fs.writeFileSync(segTransPath, JSON.stringify(translatedTexts, null, 2));
                 }
 
@@ -1615,6 +1623,12 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
             } else if (fs.existsSync(langScriptPath)) {
                 translatedText = fs.readFileSync(langScriptPath, 'utf8');
             } else {
+                const detectedLang = transcriptionResult.language || null;
+                if (detectedLang && detectedLang === lang) {
+                    console.log(`🔄 Idioma detectado (${detectedLang}) coincide con target (${lang}), usando texto original`);
+                    translatedText = originalText;
+                    fs.writeFileSync(langScriptPath, translatedText);
+                } else {
                 let specialInstruction = "";
                 if (['de', 'ko', 'ru'].includes(lang)) {
                     specialInstruction = `
@@ -1679,6 +1693,7 @@ ${originalText}`;
                 translatedText = translatedText.replace(/```[\s\S]*?```/g, '').trim();
                 if (!translatedText) translatedText = result.response.text();
                 fs.writeFileSync(langScriptPath, translatedText);
+                }
             }
 
             // TTS
