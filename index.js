@@ -309,16 +309,19 @@ const GEMINI_TRANSCRIPTION_MODEL = 'gemini-3.1-pro-preview';
 // ==============================
 
 function findPythonCommand() {
-    const candidates = process.platform === 'win32' ? ['python', 'python3', 'py'] : ['python3', 'python'];
+    const { spawnSync } = require('child_process');
+    const candidates = process.platform === 'win32' ? ['py', 'python', 'python3'] : ['python3', 'python'];
     for (const cmd of candidates) {
         try {
-            const result = require('child_process').execFileSync(cmd, ['--version'], { timeout: 5000, stdio: 'pipe' });
-            if (result.toString().includes('Python')) {
+            const result = spawnSync(cmd, ['--version'], { timeout: 5000, stdio: 'pipe', shell: true, windowsHide: true });
+            const output = (result.stdout || '').toString() + (result.stderr || '').toString();
+            if (result.status === 0 && output.includes('Python')) {
                 console.log(`🐍 Usando: ${cmd}`);
                 return cmd;
             }
         } catch (_) {}
     }
+    console.error('❌ No se encontró Python. Instala Python y agrega al PATH.');
     return 'python';
 }
 
@@ -334,7 +337,7 @@ async function transcribeWithWhisperLocal(audioPath, language = null, modelSize 
         const pythonCmd = getPython();
         console.log(`🎙️ Transcribiendo con Whisper Local (${modelSize}) usando ${pythonCmd}...`);
         
-        const proc = spawn(pythonCmd, args, { cwd: __dirname, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+        const proc = spawn(pythonCmd, args, { cwd: __dirname, env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, shell: true, windowsHide: true });
         let stdout = '';
         let stderr = '';
         
