@@ -345,8 +345,16 @@ async function transcribeWithWhisperLocal(audioPath, language = null, modelSize 
         
         proc.on('close', code => {
             if (code !== 0) {
-                console.error(`❌ Whisper Local stderr:\n${stderr}`);
-                return reject(new Error(`Whisper Local failed (code ${code}): ${stderr.slice(-500)}`));
+                // Python errors go to stdout as JSON, check there first
+                let errorMsg = stderr.slice(-500);
+                try {
+                    const errResult = JSON.parse(stdout);
+                    if (errResult.error) errorMsg = errResult.error;
+                } catch (_) {
+                    if (stdout.trim()) errorMsg = errorMsg || stdout.slice(-500);
+                }
+                console.error(`❌ Whisper Local error: ${errorMsg}`);
+                return reject(new Error(`Whisper Local failed (code ${code}): ${errorMsg}`));
             }
             try {
                 const result = JSON.parse(stdout);
