@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import fs from 'fs';
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import { promisify } from 'util';
 import { writeFile } from 'fs/promises';
 import express from 'express';
@@ -309,7 +309,6 @@ const GEMINI_TRANSCRIPTION_MODEL = 'gemini-3.1-pro-preview';
 // ==============================
 
 function findPythonCommand() {
-    const { spawnSync } = require('child_process');
     const candidates = process.platform === 'win32' ? ['py', 'python', 'python3'] : ['python3', 'python'];
     for (const cmd of candidates) {
         try {
