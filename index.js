@@ -308,12 +308,33 @@ const GEMINI_TRANSCRIPTION_MODEL = 'gemini-3.1-pro-preview';
 // WHISPER LOCAL TRANSCRIPTION
 // ==============================
 
+function findPythonCommand() {
+    const candidates = process.platform === 'win32' ? ['python', 'python3', 'py'] : ['python3', 'python'];
+    for (const cmd of candidates) {
+        try {
+            const result = require('child_process').execFileSync(cmd, ['--version'], { timeout: 5000, stdio: 'pipe' });
+            if (result.toString().includes('Python')) {
+                console.log(`🐍 Usando: ${cmd}`);
+                return cmd;
+            }
+        } catch (_) {}
+    }
+    return 'python';
+}
+
+let _pythonCmd = null;
+function getPython() {
+    if (!_pythonCmd) _pythonCmd = findPythonCommand();
+    return _pythonCmd;
+}
+
 async function transcribeWithWhisperLocal(audioPath, language = null, modelSize = 'large-v3') {
     return new Promise((resolve, reject) => {
         const args = [path.join(__dirname, 'whisper_local.py'), 'transcribe', audioPath, language || 'auto', modelSize];
-        console.log(`🎙️ Transcribiendo con Whisper Local (${modelSize})...`);
+        const pythonCmd = getPython();
+        console.log(`🎙️ Transcribiendo con Whisper Local (${modelSize}) usando ${pythonCmd}...`);
         
-        const proc = spawn('python', args, { cwd: __dirname, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+        const proc = spawn(pythonCmd, args, { cwd: __dirname, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
         let stdout = '';
         let stderr = '';
         
