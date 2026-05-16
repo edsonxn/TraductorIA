@@ -345,8 +345,8 @@ async function transcribeWithWhisperLocal(audioPath, language = null, modelSize 
         
         proc.on('close', code => {
             if (code !== 0) {
-                console.error(`❌ Whisper Local stderr: ${stderr.slice(-500)}`);
-                return reject(new Error(`Whisper Local failed (code ${code}): ${stderr.slice(-200)}`));
+                console.error(`❌ Whisper Local stderr:\n${stderr}`);
+                return reject(new Error(`Whisper Local failed (code ${code}): ${stderr.slice(-500)}`));
             }
             try {
                 const result = JSON.parse(stdout);

@@ -94,8 +94,7 @@ class WhisperLocal:
             force_device: cuda, cpu, auto
         """
         if not FASTER_WHISPER_AVAILABLE:
-            # print(f"❌ Faster-Whisper no está disponible: {FASTER_WHISPER_ERROR}")
-            return False
+            raise RuntimeError(f"faster-whisper no está instalado. Ejecuta: pip install faster-whisper torch. Error: {FASTER_WHISPER_ERROR}")
         
         try:
             # Detectar dispositivo si no se especifica
