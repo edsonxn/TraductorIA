@@ -302,7 +302,56 @@ async function saveWaveFile(filename, pcmData, channels = 1, rate = 24000, sampl
 // GEMINI TRANSCRIPTION (replaces Whisper)
 // ==============================
 
-const GEMINI_TRANSCRIPTION_MODEL = 'gemini-2.5-flash';
+const GEMINI_TRANSCRIPTION_MODEL = 'gemini-3.1-pro-preview';
+
+// ==============================
+// WHISPER LOCAL TRANSCRIPTION
+// ==============================
+
+async function transcribeWithWhisperLocal(audioPath, language = null, modelSize = 'large-v3') {
+    return new Promise((resolve, reject) => {
+        const args = [path.join(__dirname, 'whisper_local.py'), 'transcribe', audioPath, language || 'auto', modelSize];
+        console.log(`🎙️ Transcribiendo con Whisper Local (${modelSize})...`);
+        
+        const proc = spawn('python', args, { cwd: __dirname, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+        let stdout = '';
+        let stderr = '';
+        
+        proc.stdout.on('data', d => stdout += d);
+        proc.stderr.on('data', d => stderr += d);
+        
+        proc.on('close', code => {
+            if (code !== 0) {
+                console.error(`❌ Whisper Local stderr: ${stderr.slice(-500)}`);
+                return reject(new Error(`Whisper Local failed (code ${code}): ${stderr.slice(-200)}`));
+            }
+            try {
+                const result = JSON.parse(stdout);
+                if (!result.success) {
+                    return reject(new Error(result.error || 'Whisper transcription failed'));
+                }
+                // Normalize to same format as Gemini transcription
+                const normalized = {
+                    language: result.language,
+                    transcript: result.transcript,
+                    segments: (result.segments || []).map(s => ({
+                        start: Math.round(s.start * 100) / 100,
+                        end: Math.round(s.end * 100) / 100,
+                        text: s.text
+                    }))
+                };
+                console.log(`✅ Whisper Local: ${normalized.segments.length} segmentos, idioma: ${normalized.language}`);
+                resolve(normalized);
+            } catch (e) {
+                reject(new Error(`Failed to parse Whisper output: ${e.message}`));
+            }
+        });
+        
+        proc.on('error', err => {
+            reject(new Error(`Could not start Python: ${err.message}`));
+        });
+    });
+}
 
 async function transcribeAudioWithGemini(audioPath, clientKeys = null) {
     const freeKeys = getFreeGoogleAPIKeys(clientKeys);
@@ -651,6 +700,7 @@ async function generateSingleGoogleTTS(text, outputPath, lang, selectedVoice = '
                     model: modelName,
                     contents: [{ role: 'user', parts: [{ text: text }] }],
                     config: {
+                        temperature: 0.5,
                         responseModalities: ['AUDIO'],
                         speechConfig: {
                             voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName } }
@@ -912,7 +962,7 @@ async function adjustAudioSpeed(inPath, outPath, targetDuration) {
 }
 
 async function translateSegmentsBatch(segments, lang, langName, options) {
-    const { translationModel, podcastStyle, clientKeys, costTracker } = options;
+    const { translationModel, podcastStyle, clientKeys, costTracker, sameLanguage } = options;
     const segmentTexts = segments.map(s => s.text);
 
     const BATCH = 50;
@@ -921,13 +971,26 @@ async function translateSegmentsBatch(segments, lang, langName, options) {
     for (let bStart = 0; bStart < segmentTexts.length; bStart += BATCH) {
         const batch = segmentTexts.slice(bStart, bStart + BATCH);
 
-        const prompt = `Translate each of the following transcript segments to ${langName}.
+        let prompt;
+        if (sameLanguage && podcastStyle) {
+            prompt = `Rewrite each of the following transcript segments in a conversational podcast style in ${langName}.
+Make it sound natural, casual, and engaging — like a real podcast host talking to their audience.
+Add natural speech flow, but do NOT change the meaning or add new information.
+Keep each segment roughly the same length as the original.
+Return ONLY a valid JSON array of strings. Each element is the rewritten version of the corresponding input segment at the same index.
+Do NOT add, remove, or reorder segments. Return exactly ${batch.length} strings.
+OUTPUT ONLY THE JSON ARRAY. No markdown code blocks, no explanation.
+
+${JSON.stringify(batch)}`;
+        } else {
+            prompt = `Translate each of the following transcript segments to ${langName}.
 Return ONLY a valid JSON array of strings. Each element is the translation of the corresponding input segment at the same index.
 Do NOT add, remove, or reorder segments. Return exactly ${batch.length} translated strings.
 ${podcastStyle ? 'Keep the translation conversational and natural sounding.' : 'Maintain the original tone and style.'}
 OUTPUT ONLY THE JSON ARRAY. No markdown code blocks, no explanation.
 
 ${JSON.stringify(batch)}`;
+        }
 
         const selectedModel = translationModel || GEMINI_TEXT_MODEL;
         let result;
@@ -1319,8 +1382,15 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
         }
 
         if (!transcriptionResult) {
-            sendStatus('Transcribiendo audio con Gemini...', 30);
-            transcriptionResult = await transcribeAudioWithGemini(audioPath, clientKeys);
+            const transcriptionMethod = req.body.transcriptionMethod || 'gemini';
+            
+            if (transcriptionMethod === 'whisper') {
+                sendStatus('Transcribiendo audio con Whisper Local (GPU)...', 30);
+                transcriptionResult = await transcribeWithWhisperLocal(audioPath);
+            } else {
+                sendStatus('Transcribiendo audio con Gemini...', 30);
+                transcriptionResult = await transcribeAudioWithGemini(audioPath, clientKeys);
+            }
             // Split oversized segments, then fix timestamp jumps
             if (transcriptionResult.segments && transcriptionResult.segments.length > 0) {
                 transcriptionResult.segments = splitOversizedSegments(transcriptionResult.segments);
@@ -1415,17 +1485,24 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
                 }
                 if (!translatedTexts) {
                     const detectedLang = transcriptionResult.language || null;
-                    if (detectedLang && detectedLang === lang) {
+                    const isPodcast = req.body.podcastStyle === 'true';
+                    if (detectedLang && detectedLang === lang && !isPodcast) {
                         console.log(`🔄 Idioma detectado (${detectedLang}) coincide con target (${lang}), usando textos originales`);
                         sendStatus(`Idioma original detectado: ${langNames[lang]}. Usando transcripción original...`, progress);
                         translatedTexts = transcriptionResult.segments.map(s => s.text);
                     } else {
-                        sendStatus(`Traduciendo segmentos a ${langNames[lang]}...`, progress);
+                        if (detectedLang && detectedLang === lang && isPodcast) {
+                            console.log(`🎙️ Mismo idioma (${lang}) pero estilo podcast activo, reescribiendo...`);
+                            sendStatus(`Reescribiendo en estilo podcast para ${langNames[lang]}...`, progress);
+                        } else {
+                            sendStatus(`Traduciendo segmentos a ${langNames[lang]}...`, progress);
+                        }
                         translatedTexts = await translateSegmentsBatch(
                             transcriptionResult.segments, lang, langNames[lang],
                             {
                                 translationModel: req.body.translationModel,
-                                podcastStyle: req.body.podcastStyle === 'true',
+                                podcastStyle: isPodcast,
+                                sameLanguage: detectedLang && detectedLang === lang,
                                 clientKeys,
                                 costTracker
                             }
@@ -1465,21 +1542,37 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
                     const voicesList = ['Zephyr','Kore','Leda','Aoede','Callirrhoe','Autonoe','Algieba','Despina','Erinome','Algenib','Rasalgethi','Laomedeia','Achernar','Gacrux','Pulcherrima','Achird','Vindemiatrix','Sadachbia','Sadaltager','Sulafat','Puck','Charon','Fenrir','Orus','Enceladus','Iapetus','Umbriel','Alnilam','Schedar','Zubenelgenubi'];
 
                     // Build groups of GROUP_SIZE segments
+                    // Build groups of GROUP_SIZE segments, breaking on significant gaps
+                    // so that silences between segments are preserved as actual gaps
+                    const GAP_BREAK_THRESHOLD = 1.5; // seconds — break group if gap between consecutive segments exceeds this
                     const groups = [];
-                    for (let i = 0; i < segs.length; i += GROUP_SIZE) {
-                        const groupSegs = segs.slice(i, Math.min(i + GROUP_SIZE, segs.length));
-                        const groupTexts = groupSegs.map((_, idx) => translatedTexts[i + idx]).filter(t => t && t.trim());
+                    let gi = 0;
+                    while (gi < segs.length) {
+                        let groupEnd = Math.min(gi + GROUP_SIZE, segs.length);
+
+                        // Check for significant gaps within the would-be group and break early
+                        for (let j = gi + 1; j < groupEnd; j++) {
+                            const intraGap = segs[j].start - segs[j - 1].end;
+                            if (intraGap > GAP_BREAK_THRESHOLD) {
+                                groupEnd = j; // Break the group before this gap
+                                break;
+                            }
+                        }
+
+                        const groupSegs = segs.slice(gi, groupEnd);
+                        const groupTexts = groupSegs.map((_, idx) => translatedTexts[gi + idx]).filter(t => t && t.trim());
                         const groupStart = groupSegs[0].start;
-                        const groupEnd = groupSegs[groupSegs.length - 1].end;
+                        const gEnd = groupSegs[groupSegs.length - 1].end;
                         groups.push({
                             index: groups.length,
-                            startSegIdx: i,
-                            endSegIdx: Math.min(i + GROUP_SIZE, segs.length) - 1,
+                            startSegIdx: gi,
+                            endSegIdx: groupEnd - 1,
                             text: groupTexts.join(' '),
                             start: groupStart,
-                            end: groupEnd,
-                            duration: groupEnd - groupStart
+                            end: gEnd,
+                            duration: gEnd - groupStart
                         });
+                        gi = groupEnd;
                     }
                     console.log(`📊 ${segs.length} segmentos → ${groups.length} grupos de ~${GROUP_SIZE} para TTS`);
 
@@ -1762,12 +1855,13 @@ ${originalText}`;
             }
 
             // Final mix
+            console.log(`🎬 Final mix: segmentBased=${segmentBased}, videoDuration=${videoDuration}, filterString=${filterString}`);
             await new Promise((resolve, reject) => {
                 let ffmpegArgs = [];
 
                 if (musicFile) {
                     ffmpegArgs = ['-y', '-i', audioOutputPath, '-stream_loop', '-1', '-i', musicFile.path,
-                        '-filter_complex', `[0:a]aresample=48000,${filterString}[speech];[1:a]aresample=48000,volume=0.7[bgm];[speech][bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,volume=2[out]`,
+                        '-filter_complex', `[0:a]aresample=48000,${filterString}[speech];[1:a]aresample=48000,volume=0.7[bgm];[speech][bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[out]`,
                         '-map', '[out]', '-acodec', 'pcm_s16le', finalAudioPath];
                 } else {
                     ffmpegArgs = ['-y', '-i', audioOutputPath, '-af', `aresample=48000,${filterString}`, '-acodec', 'pcm_s16le', finalAudioPath];
@@ -1930,7 +2024,7 @@ app.post('/api/manual-translate-video', upload.fields(manualUploadFields), async
                 let ffmpegArgs;
                 if (musicFile) {
                     ffmpegArgs = ['-y', '-i', langAudioPath, '-stream_loop', '-1', '-i', musicFile.path,
-                        '-filter_complex', `[0:a]aresample=48000,${filterString}[speech];[1:a]aresample=48000,volume=0.7[bgm];[speech][bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,volume=2[out]`,
+                        '-filter_complex', `[0:a]aresample=48000,${filterString}[speech];[1:a]aresample=48000,volume=0.7[bgm];[speech][bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[out]`,
                         '-map', '[out]', '-acodec', 'pcm_s16le', finalOutputPath];
                 } else {
                     ffmpegArgs = ['-y', '-i', langAudioPath, '-af', `aresample=48000,${filterString}`, '-acodec', 'pcm_s16le', finalOutputPath];

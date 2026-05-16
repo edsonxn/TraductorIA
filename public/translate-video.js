@@ -405,6 +405,9 @@ window.startVideoTranslation = async function(isRetry = false) {      if (!isRet
 
         const translationModel = document.querySelector('input[name="translationModel"]:checked')?.value || 'gemini-3-flash-preview';
         formData.append('translationModel', translationModel);
+
+        const transcriptionMethod = document.querySelector('input[name="transcriptionMethod"]:checked')?.value || 'gemini';
+        formData.append('transcriptionMethod', transcriptionMethod);
     }
 
     // Append client API keys from localStorage
@@ -775,10 +778,17 @@ window.clearCostHistory = async function() {
 // ==============================
 async function loadOutputDir() {
     try {
+        const input = document.getElementById('outputDirInput');
+        // Show cached value immediately while fetching
+        const cached = localStorage.getItem('lastOutputDir');
+        if (input && cached) input.value = cached;
+        
         const resp = await fetch('/api/settings/output-dir');
         const data = await resp.json();
-        const input = document.getElementById('outputDirInput');
-        if (input && data.outputsDir) input.value = data.outputsDir;
+        if (input && data.outputsDir) {
+            input.value = data.outputsDir;
+            localStorage.setItem('lastOutputDir', data.outputsDir);
+        }
     } catch (e) {}
 }
 
@@ -791,6 +801,7 @@ window.changeOutputDir = async function() {
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-pen"></i>'; }
         if (data.success) {
             document.getElementById('outputDirInput').value = data.outputsDir;
+            localStorage.setItem('lastOutputDir', data.outputsDir);
         }
     } catch (e) {
         alert('Error: ' + e.message);

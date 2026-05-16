@@ -890,6 +890,23 @@
               <div id="autoSettingsPanel">
                   <div class="tv-form-group">
                       <div class="tv-section-title">
+                          <i class="fas fa-headphones"></i> Método de Transcripción
+                      </div>
+                      <div class="tv-options-list">
+                          <label class="tv-option-label">
+                              <input type="radio" name="transcriptionMethod" value="gemini" checked>
+                              <span>Gemini (Rápido, usa API)</span>
+                          </label>
+                          <label class="tv-option-label">
+                              <input type="radio" name="transcriptionMethod" value="whisper">
+                              <span>Whisper Local (Preciso, usa GPU)</span>
+                          </label>
+                      </div>
+                      <p style="margin: 6px 0 0; font-size: 0.78em; color: #71717a;"><i class="fas fa-info-circle" style="color: #60a5fa;"></i> Whisper tiene timestamps más precisos pero requiere GPU y es más lento. Gemini es rápido pero puede fallar en los tiempos con transiciones musicales.</p>
+                  </div>
+
+                  <div class="tv-form-group">
+                      <div class="tv-section-title">
                           <i class="fas fa-brain"></i> Modelo de Traducción
                       </div>
                       <div class="tv-options-list">

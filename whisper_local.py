@@ -178,7 +178,7 @@ class WhisperLocal:
             
             start_time = time.time()
             
-            # Transcribir
+            # Transcribir con word timestamps para detectar silencios internos
             segments, info = self.model.transcribe(
                 audio_path,
                 language=language,
@@ -187,22 +187,99 @@ class WhisperLocal:
                 temperature=0.0,     # Determinístico
                 condition_on_previous_text=False,  # Mejor para audio largo
                 vad_filter=True,     # Filtro de detección de voz
-                vad_parameters=dict(min_silence_duration_ms=500)  # Filtrar silencios
+                vad_parameters=dict(min_silence_duration_ms=400),
+                word_timestamps=True  # Timestamps por palabra para split en silencios
             )
             
-            # Combinar todos los segmentos
+            # Combinar todos los segmentos usando word timestamps
+            # Estrategia: reagrupar palabras por ORACIONES COMPLETAS (cortar en . ? !)
+            # y también forzar corte en silencios grandes entre palabras
+            SILENCE_THRESHOLD = 1.2  # segundos de silencio entre palabras para forzar corte
+            MAX_SEGMENT_DURATION = 15  # máximo de segundos por segmento
+            
+            # Primero, recopilar TODAS las palabras de todos los segmentos
+            all_words = []
+            for segment in segments:
+                words = segment.words if hasattr(segment, 'words') and segment.words else None
+                if words:
+                    all_words.extend(words)
+                elif segment.text.strip():
+                    # Fallback: segmento sin words, crear pseudo-word
+                    class PseudoWord:
+                        def __init__(self, start, end, word):
+                            self.start = start
+                            self.end = end
+                            self.word = word
+                    all_words.append(PseudoWord(segment.start, segment.end, " " + segment.text.strip()))
+            
+            # Ahora reagrupar por oraciones completas
             transcript_text = ""
             detailed_segments = []
             
-            for segment in segments:
-                transcript_text += segment.text
-                detailed_segments.append({
-                    "start": segment.start,
-                    "end": segment.end,
-                    "text": segment.text.strip(),
-                    "avg_logprob": segment.avg_logprob,
-                    "no_speech_prob": segment.no_speech_prob
-                })
+            if not all_words:
+                # Sin palabras, usar transcript crudo
+                transcript_text = ""
+                for segment in segments:
+                    transcript_text += segment.text
+                    detailed_segments.append({
+                        "start": segment.start,
+                        "end": segment.end,
+                        "text": segment.text.strip()
+                    })
+            else:
+                current_words = []
+                current_start = all_words[0].start
+                
+                for wi, word in enumerate(all_words):
+                    # Detectar silencio grande ANTES de esta palabra
+                    if wi > 0:
+                        gap = word.start - all_words[wi - 1].end
+                        if gap > SILENCE_THRESHOLD and current_words:
+                            # Forzar corte por silencio
+                            seg_text = "".join(w.word for w in current_words).strip()
+                            if seg_text:
+                                detailed_segments.append({
+                                    "start": current_start,
+                                    "end": current_words[-1].end,
+                                    "text": seg_text
+                                })
+                                transcript_text += seg_text + " "
+                            current_words = []
+                            current_start = word.start
+                    
+                    current_words.append(word)
+                    
+                    # Verificar si esta palabra termina una oración
+                    word_text = word.word.strip()
+                    ends_sentence = word_text and word_text[-1] in '.?!。'
+                    
+                    # También cortar si el segmento es muy largo
+                    segment_too_long = (word.end - current_start) > MAX_SEGMENT_DURATION
+                    
+                    if ends_sentence or segment_too_long:
+                        seg_text = "".join(w.word for w in current_words).strip()
+                        if seg_text:
+                            detailed_segments.append({
+                                "start": current_start,
+                                "end": word.end,
+                                "text": seg_text
+                            })
+                            transcript_text += seg_text + " "
+                        current_words = []
+                        # El start del siguiente segmento será el inicio de la siguiente palabra
+                        if wi + 1 < len(all_words):
+                            current_start = all_words[wi + 1].start
+                
+                # Cerrar último segmento si quedan palabras
+                if current_words:
+                    seg_text = "".join(w.word for w in current_words).strip()
+                    if seg_text:
+                        detailed_segments.append({
+                            "start": current_start,
+                            "end": current_words[-1].end,
+                            "text": seg_text
+                        })
+                        transcript_text += seg_text + " "
             
             transcription_time = time.time() - start_time
             
@@ -222,7 +299,6 @@ class WhisperLocal:
                 "segments": detailed_segments,
                 "stats": {
                     "total_segments": len(detailed_segments),
-                    "avg_confidence": sum(s["avg_logprob"] for s in detailed_segments) / len(detailed_segments) if detailed_segments else 0,
                     "processing_speed": info.duration / transcription_time if transcription_time > 0 else 0
                 }
             }
@@ -287,5 +363,38 @@ def test_whisper_local():
     
     return success
 
+def transcribe_cli():
+    """CLI entry point: python whisper_local.py transcribe <audio_path> [language] [model_size]
+    Outputs JSON result to stdout."""
+    import sys
+    import io
+    # Force UTF-8 output on Windows
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    
+    if len(sys.argv) < 3:
+        print(json.dumps({"success": False, "error": "Usage: whisper_local.py transcribe <audio_path> [language] [model_size]"}))
+        sys.exit(1)
+    
+    audio_path = sys.argv[2]
+    language = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] != "auto" else None
+    model_size = sys.argv[4] if len(sys.argv) > 4 else "large-v3"
+    
+    if not os.path.exists(audio_path):
+        print(json.dumps({"success": False, "error": f"File not found: {audio_path}"}))
+        sys.exit(1)
+    
+    try:
+        whisper_local.load_model(model_size)
+        result = whisper_local.transcribe_audio(audio_path, language=language)
+        print(json.dumps(result, ensure_ascii=False))
+    except Exception as e:
+        print(json.dumps({"success": False, "error": str(e)}))
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    test_whisper_local()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "transcribe":
+        transcribe_cli()
+    else:
+        test_whisper_local()
