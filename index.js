@@ -332,7 +332,8 @@ function getPython() {
 
 async function transcribeWithWhisperLocal(audioPath, language = null, modelSize = 'large-v3') {
     return new Promise((resolve, reject) => {
-        const args = [path.join(__dirname, 'whisper_local.py'), 'transcribe', audioPath, language || 'auto', modelSize];
+        const scriptPath = path.join(__dirname, 'whisper_local.py');
+        const args = [`"${scriptPath}"`, 'transcribe', `"${audioPath}"`, language || 'auto', modelSize];
         const pythonCmd = getPython();
         console.log(`🎙️ Transcribiendo con Whisper Local (${modelSize}) usando ${pythonCmd}...`);
         
