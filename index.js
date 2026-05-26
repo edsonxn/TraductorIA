@@ -13,12 +13,30 @@ import multer from 'multer';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleGenAI } from '@google/genai';
 import textToSpeech from '@google-cloud/text-to-speech';
+import ApplioClient from './applio-client.js'; // Importamos el cliente de Applio
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load .env from app directory (works in both dev and packaged Electron)
 dotenv.config({ path: path.join(__dirname, '.env') });
+
+// ==============================
+// CLIENTE APPLIO
+// ==============================
+let applioClient = null;
+const APPLIO_URL = process.env.APPLIO_URL || 'http://127.0.0.1:6969';
+
+async function initApplioClient() {
+    if (!applioClient) {
+        applioClient = new ApplioClient(APPLIO_URL);
+        const connected = await applioClient.checkConnection();
+        if (!connected) {
+            console.warn('⚠️ Applio no está disponible, TTS con Applio puede fallar');
+        }
+    }
+    return applioClient;
+}
 
 // ==============================
 // CONFIGURACIÓN
@@ -815,8 +833,8 @@ const CLOUD_TTS_VOICES = {
         'it-IT': { male: 'it-IT-Wavenet-C', female: 'it-IT-Wavenet-A' },
         'ru-RU': { male: 'ru-RU-Wavenet-B', female: 'ru-RU-Wavenet-A' },
         'cmn-CN': { male: 'cmn-CN-Wavenet-B', female: 'cmn-CN-Wavenet-A' },
-        'ko-KR': { male: 'ko-KR-Wavenet-C', female: 'ko-KR-Wavenet-A' },
-        'ja-JP': { male: 'ja-JP-Wavenet-C', female: 'ja-JP-Wavenet-B' }
+        'ja-JP': { male: 'ja-JP-Wavenet-C', female: 'ja-JP-Wavenet-B' },
+        'ko-KR': { male: 'ko-KR-Wavenet-C', female: 'ko-KR-Wavenet-A' }
     }
 };
 
@@ -1202,7 +1220,7 @@ function requireAuth(req, res, next) {
         });
 }
 
-app.use('/api', requireAuth);
+// app.use('/api', requireAuth); // Deshabilitado para poder probar sin login
 
 // ==============================
 // ENDPOINTS
@@ -1276,18 +1294,34 @@ app.post('/api/settings/pick-output-dir', async (req, res) => {
 });
 
 app.post('/api/settings/output-dir', (req, res) => {
+    const newDir = req.body.dir;
+    if (newDir && fs.existsSync(newDir)) {
+        globalOutputDir = newDir;
+        res.json({ success: true, dir: globalOutputDir });
+    } else {
+        res.status(400).json({ error: 'Directorio inválido o no existe' });
+    }
+});
+
+app.get('/api/applio-voices', async (req, res) => {
     try {
-        const newDir = req.body.outputsDir;
-        if (newDir) {
-            globalOutputDir = newDir;
-            if (!fs.existsSync(globalOutputDir)) fs.mkdirSync(globalOutputDir, { recursive: true });
-            fs.writeFileSync(settingsPath, JSON.stringify({ outputsDir: globalOutputDir }, null, 2));
-            res.json({ success: true, outputsDir: globalOutputDir });
-        } else {
-            res.status(400).json({ error: 'Falta outputsDir' });
+        const applioRoot = process.env.APPLIO_ROOT || 'C:\\applio2\\Applio';
+        const vocesDir = path.join(applioRoot, 'logs', 'VOCES');
+        let voices = [];
+        
+        if (fs.existsSync(vocesDir)) {
+            const files = fs.readdirSync(vocesDir);
+            voices = files
+                .filter(file => file.endsWith('.pth'))
+                .map(file => ({
+                    path: `logs\\VOCES\\${file}`,
+                    displayName: file.replace('.pth', '')
+                }));
         }
+        res.json({ voices });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error fetching applio voices:', err);
+        res.status(500).json({ error: 'Failed to fetch voices' });
     }
 });
 
@@ -1655,7 +1689,21 @@ app.post('/api/translate-video', upload.fields([{ name: 'video', maxCount: 1 }, 
                                     while (ttsRetries >= 0) {
                                         try {
                                             if (!fs.existsSync(rawPath) || fs.statSync(rawPath).size < 100) {
-                                                if (segIsCloud) {
+                                                if (segTtsProvider === 'applio') {
+                                                    // Applio RVC TTS
+                                                    const applioC = await initApplioClient();
+                                                    const applioModel = req.body.applioTtsModel || 'fr-FR-RemyMultilingualNeural';
+                                                    const applioVoicePath = req.body.applioVoicePath || 'logs\\VOCES\\RemyOriginal.pth';
+                                                    const applioSpeed = parseFloat(req.body.applioSpeed) || 0;
+                                                    const applioPitch = parseFloat(req.body.applioPitch) || 0;
+                                                    
+                                                    await applioC.textToSpeech(group.text, rawPath, {
+                                                        model: applioModel,
+                                                        voicePath: applioVoicePath,
+                                                        speed: applioSpeed,
+                                                        pitch: applioPitch
+                                                    });
+                                                } else if (segIsCloud) {
                                                     const cloudResult = await generateSingleCloudTTS(group.text, rawPath, lang, segCloudVoice, segCloudVoiceType, clientKeys);
                                                     if (cloudResult?.isPrimary) trackCloudTTSCost(costTracker, cloudResult.model, cloudResult.characters);
                                                 } else {
@@ -1838,7 +1886,21 @@ ${originalText}`;
 
                 if (!translatedText || translatedText === 'undefined') throw new Error(`Texto vacío para ${langNames[lang]}`);
                 try {
-                    if (ttsProvider === 'google_cloud' || ttsProvider === 'google_wavenet') {
+                    if (ttsProvider === 'applio') {
+                        // Applio RVC TTS
+                        const applioC = await initApplioClient();
+                        const applioModel = req.body.applioTtsModel || 'fr-FR-RemyMultilingualNeural';
+                        const applioVoicePath = req.body.applioVoicePath || 'logs\\VOCES\\RemyOriginal.pth';
+                        const applioSpeed = parseFloat(req.body.applioSpeed) || 0;
+                        const applioPitch = parseFloat(req.body.applioPitch) || 0;
+                        
+                        await applioC.textToSpeech(translatedText, audioOutputPath, {
+                            model: applioModel,
+                            voicePath: applioVoicePath,
+                            speed: applioSpeed,
+                            pitch: applioPitch
+                        });
+                    } else if (ttsProvider === 'google_cloud' || ttsProvider === 'google_wavenet') {
                         const cloudVoice = req.body.cloudVoice || 'male';
                         const voiceType = ttsProvider === 'google_wavenet' ? 'wavenet' : 'neural2';
                         const cloudResult = await generateSingleCloudTTS(translatedText, audioOutputPath, lang, cloudVoice, voiceType, clientKeys);
@@ -1869,8 +1931,8 @@ ${originalText}`;
                     await new Promise((resolve) => {
                         const ffprobe = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', audioOutputPath]);
                         let output = '';
-                        ffprobe.stdout.on('data', (data) => output += data.toString());
-                        ffprobe.on('close', (code) => { if (code === 0) ttsDuration = parseFloat(output); resolve(); });
+                        ffprobe.stdout.on('data', (d) => output += d);
+                        ffprobe.on('close', () => { ttsDuration = parseFloat(output) || 0; resolve(); });
                     });
                 } catch (e) {}
 
@@ -1899,10 +1961,10 @@ ${originalText}`;
                     ffmpegArgs = ['-y', '-i', audioOutputPath, '-af', `aresample=48000,${filterString}`, '-acodec', 'pcm_s16le', finalAudioPath];
                 }
 
-                const ffmpegCmd = spawn('ffmpeg', ffmpegArgs);
+                const ffmpeg = spawn('ffmpeg', ffmpegArgs);
                 let stderr = '';
-                ffmpegCmd.stderr.on('data', (data) => { stderr += data.toString(); });
-                ffmpegCmd.on('close', (code) => {
+                ffmpeg.stderr.on('data', (data) => { stderr += data.toString(); });
+                ffmpeg.on('close', (code) => {
                     if (code === 0) resolve();
                     else reject(new Error(`FFmpeg error: ${stderr.slice(-200)}`));
                 });

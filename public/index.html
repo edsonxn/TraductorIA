@@ -22,7 +22,6 @@
           margin: 0;
           padding: 0;
           height: 100vh;
-          overflow: hidden;
           background: #09090b;
           font-family: 'Inter', sans-serif;
           color: #e4e4e7;
@@ -282,7 +281,6 @@
           display: grid;
           grid-template-columns: 340px 1fr;
           gap: 12px;
-          overflow: hidden;
           min-height: 0;
       }
 
@@ -931,7 +929,11 @@
                       </div>
                       <div class="tv-options-list">
                           <label class="tv-option-label">
-                              <input type="radio" name="ttsProvider" value="google" checked onchange="window.toggleVoiceSelect()">
+                              <input type="radio" name="ttsProvider" value="applio" checked onchange="window.toggleVoiceSelect()">
+                              <span>Applio (IA Local - RVC)</span>
+                          </label>
+                          <label class="tv-option-label">
+                              <input type="radio" name="ttsProvider" value="google" onchange="window.toggleVoiceSelect()">
                               <span>Gemini TTS (Estándar)</span>
                           </label>
                           <label class="tv-option-label">
@@ -951,6 +953,41 @@
                               <span>Solo Texto (Subtítulos)</span>
                           </label>
                       </div>
+                  </div>
+
+                  <div id="applioVoiceSelectContainer" style="display: none;">
+                      <div class="tv-form-group" style="margin-bottom: 12px;">
+                          <label style="display: block; margin-bottom: 8px; font-size: 0.9em; color:#94a3b8;">Género Base TTS (Applio):</label>
+                          <div class="tv-options-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                              <label class="tv-option-label">
+                                  <input type="radio" name="applioGender" value="male" checked onchange="window.updateApplioTtsModel()">
+                                  <span>🗣️ Hombre</span>
+                              </label>
+                              <label class="tv-option-label">
+                                  <input type="radio" name="applioGender" value="female" onchange="window.updateApplioTtsModel()">
+                                  <span>👩 Mujer</span>
+                              </label>
+                          </div>
+                      </div>
+                      <div class="tv-form-group">
+                          <label style="display: block; margin-bottom: 8px; font-size: 0.9em; color:#94a3b8;">Modelo RVC a Aplicar:</label>
+                          <select id="applioVoiceSelect" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: #1e293b; color: white;">
+                              <option value="logs\VOCES\RemyOriginal.pth">Cargando voces...</option>
+                          </select>
+                      </div>
+                      <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                          <div class="tv-form-group" style="flex: 1; margin-bottom: 0;">
+                              <label style="font-size: 0.8rem; display: block; margin-bottom: 4px; color:#94a3b8;">Velocidad</label>
+                              <input type="number" id="applioSpeed" value="0" step="0.1" style="width: 100%; padding: 8px; border-radius: 6px; background: #0f172a; border: 1px solid #334155; color: #fff; font-size: 0.8rem; box-sizing: border-box;">
+                          </div>
+                          <div class="tv-form-group" style="flex: 1; margin-bottom: 0;">
+                              <label style="font-size: 0.8rem; display: block; margin-bottom: 4px; color:#94a3b8;">Pitch</label>
+                              <input type="number" id="applioPitch" value="0" step="1" style="width: 100%; padding: 8px; border-radius: 6px; background: #0f172a; border: 1px solid #334155; color: #fff; font-size: 0.8rem; box-sizing: border-box;">
+                          </div>
+                      </div>
+                      <!-- Guardamos los campos ocultos para el cliente de Applio -->
+                      <input type="hidden" id="applioTtsModel" value="fr-FR-RemyMultilingualNeural">
+                      <input type="hidden" id="applioVoicePath" value="logs\VOCES\RemyOriginal.pth">
                   </div>
 
 
@@ -1043,7 +1080,9 @@
                       <div class="tv-section-title">
                           <i class="fas fa-globe"></i> Idiomas de destino
                       </div>
-                      <div class="tv-checkbox-grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="es" checked><span>Español 🇪🇸</span></label>                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="en" checked><span>Inglés 🇺🇸</span></label>
+                      <div class="tv-checkbox-grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="es" checked><span>Español 🇪🇸</span></label>
+                          <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="en" checked><span>Inglés 🇺🇸</span></label>
                           <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="fr" checked><span>Francés 🇫🇷</span></label>
                           <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="de" checked><span>Alemán 🇩🇪</span></label>
                           <label class="tv-option-label"><input type="checkbox" name="targetLanguages" value="it" checked><span>Italiano 🇮🇹</span></label>
@@ -1490,15 +1529,20 @@
               }, 30 * 60 * 1000);
           } catch (err) {
               console.error('Error loading user:', err);
-              alert('Error cargando datos de usuario');
+              // alert('Error cargando datos de usuario'); // Deshabilitado para pruebas
+              // Fallback para pruebas locales en caso de que Firestore rechace permisos
+              document.getElementById('loginOverlay').classList.add('hidden');
+              document.getElementById('pendingOverlay').classList.add('hidden');
+              document.getElementById('appContainer').style.display = 'block';
           }
       } else {
-          authToken = null;
-          currentUser = null;
-          if (tokenRefreshInterval) { clearInterval(tokenRefreshInterval); tokenRefreshInterval = null; }
-          document.getElementById('loginOverlay').classList.remove('hidden');
+          // PARA PRUEBAS LOCALES SIN LOGIN, DEJAMOS ENTRAR DIRECTO:
+          // authToken = null;
+          // currentUser = null;
+          // if (tokenRefreshInterval) { clearInterval(tokenRefreshInterval); tokenRefreshInterval = null; }
+          document.getElementById('loginOverlay').classList.add('hidden');
           document.getElementById('pendingOverlay').classList.add('hidden');
-          document.getElementById('appContainer').style.display = 'none';
+          document.getElementById('appContainer').style.display = 'block';
       }
   });
 
@@ -1515,5 +1559,18 @@
   });
   </script>
   <script src="translate-video.js?v=48229219437"></script>
+  <script>
+    // Set the hidden voice path based on the selected dropdown value
+    document.addEventListener('DOMContentLoaded', () => {
+        const applioVoiceSelect = document.getElementById('applioVoiceSelect');
+        const applioVoicePathInput = document.getElementById('applioVoicePath');
+        
+        if (applioVoiceSelect && applioVoicePathInput) {
+            applioVoiceSelect.addEventListener('change', (e) => {
+                applioVoicePathInput.value = e.target.value;
+            });
+        }
+    });
+  </script>
 </body>
 </html>

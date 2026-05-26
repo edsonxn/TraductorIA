@@ -42,8 +42,8 @@ window.getFromDB = async function(storeName, key) {
     // Inicializar estado
     window.switchTab('auto');
     window.toggleVoiceSelect();
+    loadApplioVoices(); // Llamar a cargar voces
     loadPreferences();
-    loadOutputDir();
 
     // Group Size slider
     const groupSlider = document.getElementById('groupSizeSlider');
@@ -202,6 +202,7 @@ window.toggleVoiceSelect = function() {
     const googleContainer = document.getElementById('googleVoiceSelectContainer');
     const cloudContainer = document.getElementById('cloudVoiceSelectContainer');
     const groupSizeContainer = document.getElementById('groupSizeContainer');
+    const applioContainer = document.getElementById('applioVoiceSelectContainer');
     
     if (googleContainer) {
         googleContainer.style.display = (selectedProvider === 'google' || selectedProvider === 'google_pro') ? 'block' : 'none';
@@ -209,10 +210,78 @@ window.toggleVoiceSelect = function() {
     if (cloudContainer) {
         cloudContainer.style.display = (selectedProvider === 'google_cloud' || selectedProvider === 'google_wavenet') ? 'block' : 'none';
     }
+    if (applioContainer) {
+        applioContainer.style.display = (selectedProvider === 'applio') ? 'block' : 'none';
+    }
     if (groupSizeContainer) {
         groupSizeContainer.style.display = (selectedProvider === 'text_only') ? 'none' : 'block';
     }
 };
+
+// Mapea género seleccionado a modelo TTS multilingual de Edge para Applio
+window.updateApplioTtsModel = function() {
+    const gender = document.querySelector('input[name="applioGender"]:checked')?.value || 'male';
+    const modelByGender = {
+        male: 'fr-FR-RemyMultilingualNeural',
+        female: 'en-US-AvaMultilingualNeural'
+    };
+    const ttsModelInput = document.getElementById('applioTtsModel');
+    if (ttsModelInput) ttsModelInput.value = modelByGender[gender] || modelByGender.male;
+};
+
+async function loadApplioVoices() {
+    try {
+        const response = await fetch('/api/applio-voices');
+        const data = await response.json();
+        const select = document.getElementById('applioVoiceSelect');
+        
+        if (!select) return;
+
+        select.innerHTML = '';
+        
+        let savedVoice = null;
+        try {
+            const prefs = JSON.parse(localStorage.getItem('videoTranslatorPrefs'));
+            if (prefs && prefs.applioVoice) savedVoice = prefs.applioVoice;
+        } catch (e) {}
+
+        if (data.voices && data.voices.length > 0) {
+            let foundSaved = false;
+            
+            data.voices.forEach(voice => {
+                const option = document.createElement('option');
+                option.value = voice.path || voice;
+                option.textContent = voice.displayName || voice;
+                select.appendChild(option);
+            });
+
+            if (savedVoice) {
+                const optionToSelect = Array.from(select.options).find(o => o.value === savedVoice);
+                if (optionToSelect) {
+                    optionToSelect.selected = true;
+                    foundSaved = true;
+                }
+            }
+
+            if (!foundSaved) {
+                const remyOption = Array.from(select.options).find(o => o.textContent.toLowerCase().includes('remy'));
+                if (remyOption) remyOption.selected = true;
+            }
+
+            // Actualizar valor oculto inicialmente con la opción que quedó seleccionada
+            document.getElementById('applioVoicePath').value = select.value;
+            
+        } else {
+            select.innerHTML = '<option value="logs\\\\VOCES\\\\RemyOriginal.pth">Remy (Por defecto)</option>';
+        }
+    } catch (error) {
+        console.error('Error loading Applio voices:', error);
+        const select = document.getElementById('applioVoiceSelect');
+        if (select) {
+            select.innerHTML = '<option value="logs\\\\VOCES\\\\RemyOriginal.pth">Remy (Por defecto)</option>';
+        }
+    }
+}
 
 function setupDropZone(dropZoneId, inputId, displayId, allowedTypes, onFileSelect) {
     const dropZone = document.getElementById(dropZoneId);
@@ -371,24 +440,18 @@ window.startVideoTranslation = async function(isRetry = false) {      if (!isRet
     } else {
         // Auto Mode logic
         if (isRetry) {
-            formData.append('retryVideoName', file ? file.name : '');
+            formData.append('retryVideoName', file ? file.name : ''); // Send name if available
         } else {
             formData.append('video', file);
         }
         if (musicFile) formData.append('music', musicFile);
 
-        const ttsProvider = document.querySelector('input[name="ttsProvider"]:checked')?.value || 'google';
+        const ttsProvider = document.querySelector('input[name="ttsProvider"]:checked')?.value || 'applio';
         formData.append('ttsProvider', ttsProvider);
 
         const selectedLanguages = Array.from(document.querySelectorAll('input[name="targetLanguages"]:checked'))
             .map(cb => cb.value);
         formData.append('targetLanguages', JSON.stringify(selectedLanguages));
-
-        const googleVoice = document.getElementById('googleVoiceSelect')?.value || 'Kore';
-        formData.append('googleVoice', googleVoice);
-
-        const cloudVoice = document.getElementById('cloudVoiceSelect')?.value || 'male';
-        formData.append('cloudVoice', cloudVoice);
 
         const gsIdx = parseInt(document.getElementById('groupSizeSlider')?.value ?? '1');
         const groupSize = [1, 3, 6, 9, 12][gsIdx] ?? 3;
@@ -405,6 +468,23 @@ window.startVideoTranslation = async function(isRetry = false) {      if (!isRet
 
         const translationModel = document.querySelector('input[name="translationModel"]:checked')?.value || 'gemini-3-flash-preview';
         formData.append('translationModel', translationModel);
+
+        if (ttsProvider === 'google_cloud' || ttsProvider === 'google_wavenet') {
+            const cloudVoice = document.getElementById('cloudVoiceSelect')?.value || 'male';
+            formData.append('cloudVoice', cloudVoice);
+        } else if (ttsProvider === 'applio') {
+            // Asegurar que el modelo TTS base esté sincronizado con el género seleccionado
+            if (typeof window.updateApplioTtsModel === 'function') window.updateApplioTtsModel();
+            const applioGender = document.querySelector('input[name="applioGender"]:checked')?.value || 'male';
+            formData.append('applioGender', applioGender);
+            formData.append('applioTtsModel', document.getElementById('applioTtsModel').value);
+            formData.append('applioVoicePath', document.getElementById('applioVoicePath').value);
+            formData.append('applioSpeed', document.getElementById('applioSpeed').value);
+            formData.append('applioPitch', document.getElementById('applioPitch').value);
+        } else if (ttsProvider === 'google' || ttsProvider === 'google_pro') {
+            const googleVoice = document.getElementById('googleVoiceSelect')?.value || 'Kore';
+            formData.append('googleVoice', googleVoice);
+        }
 
         const transcriptionMethod = document.querySelector('input[name="transcriptionMethod"]:checked')?.value || 'gemini';
         formData.append('transcriptionMethod', transcriptionMethod);
@@ -521,6 +601,8 @@ function savePreferences() {
             ttsProvider: document.querySelector('input[name="ttsProvider"]:checked')?.value,
             googleVoice: document.getElementById('googleVoiceSelect')?.value,
             cloudVoice: document.getElementById('cloudVoiceSelect')?.value,
+            applioVoice: document.getElementById('applioVoiceSelect')?.value,
+            applioGender: document.querySelector('input[name="applioGender"]:checked')?.value,
             groupSize: [1, 3, 6, 9, 12][parseInt(document.getElementById('groupSizeSlider')?.value ?? '1')] ?? 3,
             endScreenSeconds: parseInt(document.getElementById('endScreenSeconds')?.value) || 0
         };
@@ -538,9 +620,7 @@ function loadPreferences() {
 
         // Restore Languages
         if (prefs.targetLangs && Array.isArray(prefs.targetLangs)) {
-            // Uncheck all first
             document.querySelectorAll('input[name="targetLanguages"]').forEach(el => el.checked = false);
-            // Check saved ones
             prefs.targetLangs.forEach(lang => {
                 const el = document.querySelector(`input[name='targetLanguages'][value='${lang}']`);
                 if (el) el.checked = true;
@@ -566,6 +646,23 @@ function loadPreferences() {
         if (prefs.cloudVoice) {
             const sel = document.getElementById('cloudVoiceSelect');
             if (sel) sel.value = prefs.cloudVoice;
+        }
+
+        // Restore Applio Voice & Gender
+        if (prefs.applioGender) {
+            const radio = document.querySelector(`input[name='applioGender'][value='${prefs.applioGender}']`);
+            if (radio) {
+                radio.checked = true;
+                if (typeof window.updateApplioTtsModel === 'function') window.updateApplioTtsModel();
+            }
+        }
+        if (prefs.applioVoice) {
+            const sel = document.getElementById('applioVoiceSelect');
+            if (sel) {
+                const opt = Array.from(sel.options).find(o => o.value === prefs.applioVoice);
+                if (opt) opt.selected = true;
+                else if (sel.options.length > 0) sel.selectedIndex = 0;
+            }
         }
 
         // Restore Group Size
