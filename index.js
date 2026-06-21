@@ -54,6 +54,7 @@ const API_PRICING = {
     'gemini-3.1-pro-preview':        { input: 2.00,  output: 12.00 },
     'gemini-3-flash-preview':        { input: 0.50,  output: 3.00 },
     'gemini-3.1-flash-lite-preview': { input: 0.25,  output: 1.50 },
+    'gemini-3.1-flash-lite':         { input: 0.10,  output: 0.40 },
     'gemini-2.5-flash':              { input: 0.30,  output: 2.50, audioInput: 1.00 },
     'gemini-2.5-flash-preview-tts':  { input: 0.50,  output: 10.00 },
     'gemini-2.5-pro-preview-tts':    { input: 1.00,  output: 20.00 },
